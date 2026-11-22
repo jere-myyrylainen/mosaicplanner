@@ -10,7 +10,9 @@ Voit myös tarjoilla projektikansion paikallisesti. Käynnistä kansiossa `pytho
 - Valitse alustaksi suorakulmio, ympyrä tai pyöristetty suorakulmio. Alustan, apuristikon ja palojen mitat syötetään millimetreinä.
 - Lisää palakirjastoon suorakulmion, ympyrän tai kolmion muotoisia paloja. Valitse palatyyppi ja aseta se napsauttamalla tai piirrä vetämällä. Viiva ja muoto asettavat paloja ääriviivalle. Täyttö asettaa paloja yhtenäiselle tyhjälle alueelle valitun palan mittojen mukaisessa ruudukossa.
 - Sauman leveys määrää uusien palojen vähimmäisvälin. Jo asetetut palat säilyttävät sijaintinsa, kun sauman leveyttä muutetaan. Apuristikko on säädettävissä erikseen. Jos ristikkoon tarttuminen on käytössä, täyttö kohdistaa aloituspalan ristikkoon ja käyttää sitten palan mittoja ja saumaa seuraavien palojen asettamiseen.
-- Valintatyökalulla voit siirtää, kiertää ja poistaa yksittäisiä paloja. Hiiren rulla suurentaa ja pienentää näkymää. Käsi-työkalulla tai välilyönti pohjassa vetäminen siirtää näkymää.
+- Poista palatyyppi palakirjaston roskakoripainikkeella. Työssä käytetyt palat säilyvät piirtoalueella ja tallennetussa tiedostossa.
+- Valitse yksittäinen pala napsauttamalla. Rajaa useita paloja vetämällä tyhjästä kohdasta, tai lisää tai poista yksittäinen pala valinnasta Shift-napsautuksella. Vedä valittua palaa siirtääksesi koko valintaa. **Poista valitut** poistaa valinnan palat kerralla. Yksittäistä valittua palaa voi myös kiertää.
+- Hiiren rulla suurentaa ja pienentää näkymää. Käsi-työkalulla tai välilyönti pohjassa vetäminen siirtää näkymää.
 - Pyyhekumilla voit poistaa yhden palan napsauttamalla tai useita paloja vetämällä. Kumoa-painike palauttaa yhden vedon aikana poistetut palat kerralla.
 
 Selain tallentaa viimeisimmän työn paikalliseen muistiin, jos selaimen asetukset sallivat sen. **Tallenna** lataa työn ja sen palakirjaston JSON-tiedostoksi. **Avaa** tuo sen takaisin editoriin, myös toisella laitteella.
@@ -23,7 +25,8 @@ Selain tallentaa viimeisimmän työn paikalliseen muistiin, jos selaimen asetuks
 | E | Pyyhekumi |
 | Välilyönti + veto | Siirrä näkymää |
 | R | Kierrä valittua palaa 15° |
-| Delete / Backspace | Poista valittu pala |
+| Shift + napsautus tai veto | Muokkaa nykyistä valintaa |
+| Delete / Backspace | Poista valitut palat |
 | Ctrl / ⌘ + Z | Kumoa |
 | Ctrl / ⌘ + Shift + Z | Tee uudelleen |
 | Ctrl / ⌘ + S | Tallenna tiedostoksi |

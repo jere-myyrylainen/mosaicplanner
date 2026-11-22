@@ -5,7 +5,7 @@
   const STORAGE_KEY = 'mosaic-planner.project.v1';
   const SVG = 'http://www.w3.org/2000/svg';
   const TOOLS = {
-    select: ['Valitse', 'Valitse pala napsauttamalla. Siirrä vetämällä.'],
+    select: ['Valitse', 'Rajaa palat vetämällä tyhjästä kohdasta tai valitse ne Shift-napsautuksilla. Siirrä valintaa vetämällä palasta.'],
     draw: ['Vapaa piirto', 'Aseta pala napsauttamalla. Piirrä vetämällä.'],
     line: ['Viiva', 'Vedä viivan alusta loppuun.'],
     shape: ['Muoto', 'Vedä muodon vastakkaisten kulmien välillä.'],
@@ -13,6 +13,7 @@
     erase: ['Pyyhekumi', 'Poista pala napsauttamalla tai poista useita paloja vetämällä.'],
     pan: ['Siirrä näkymää', 'Siirrä näkymää vetämällä.']
   };
+  const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
 
   const byId = id => document.getElementById(id);
   const canvas = byId('canvas');
@@ -32,8 +33,8 @@
   const pieceElements = new Map();
 
   let project = restoreProject();
-  let activeTileId = project.tiles[0].id;
-  let selectedId = null;
+  let activeTileId;
+  let selectedIds = new Set();
   let editingTileId = null;
   let tool = 'draw';
   let placementIndex;
@@ -72,10 +73,19 @@
   }
 
   function useProject(next) {
+    if (next.tiles.some(tile => tile.archived)) {
+      const inUse = new Set(next.pieces.map(piece => piece.tileId));
+      next = { ...next, tiles: next.tiles.filter(tile => !tile.archived || inUse.has(tile.id)) };
+    }
     project = next;
-    if (!project.tiles.some(tile => tile.id === activeTileId)) activeTileId = project.tiles[0].id;
-    if (!project.pieces.some(piece => piece.id === selectedId)) selectedId = null;
+    if (!project.tiles.some(tile => tile.id === activeTileId && !tile.archived)) {
+      activeTileId = project.tiles.find(tile => !tile.archived)?.id;
+    }
+    if (selectedIds.size) {
+      selectedIds = new Set(currentSelection().map(piece => piece.id));
+    }
     placementIndex = new Model.PlacementIndex(project);
+    renderTools();
     renderAll();
     persist();
   }
@@ -200,6 +210,7 @@
     const focusedTileId = list.contains(document.activeElement) ? document.activeElement.dataset.tileChoice : null;
     let focusTarget;
     for (const tile of project.tiles) {
+      if (tile.archived) continue;
       const item = document.createElement('li');
       item.className = 'tile-row';
       const active = tile.id === activeTileId;
@@ -239,27 +250,57 @@
       edit.setAttribute('aria-label', 'Muokkaa palatyyppiä ' + tile.name);
       edit.append(icon('edit'));
       edit.addEventListener('click', () => openTileDialog(tile));
-      item.append(choice, edit);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'icon-button remove-tile delete-button';
+      remove.title = 'Poista palakirjastosta';
+      remove.setAttribute('aria-label', 'Poista palakirjastosta ' + tile.name);
+      remove.append(icon('delete'));
+      remove.addEventListener('click', () => removeTileFromLibrary(tile));
+      item.append(choice, edit, remove);
       fragment.append(item);
     }
     list.replaceChildren(fragment);
+    byId('empty-library').hidden = list.childElementCount > 0;
     if (focusTarget) focusTarget.focus({ preventScroll: true });
   }
 
-  function currentSelection() {
-    return project.pieces.find(piece => piece.id === selectedId);
+  function removeTileFromLibrary(tile) {
+    if (gesture) return;
+    const tiles = project.tiles.map(entry => entry.id === tile.id ? { ...entry, archived: true } : entry);
+    const inUse = project.pieces.some(piece => piece.tileId === tile.id);
+    commit({ ...project, tiles });
+    const nextControl = byId('tile-list').querySelector('.tile-row.active .tile-choice') || byId('add-tile-text');
+    nextControl.focus({ preventScroll: true });
+    notify(inUse ? 'Palatyyppi poistettiin kirjastosta. Asetetut palat ovat edelleen työssä.' :
+      'Palatyyppi poistettiin kirjastosta.');
   }
 
-  function renderSelection(piece = currentSelection(), valid = true) {
-    layers.selection.replaceChildren();
-    byId('selected-panel').hidden = !piece;
-    if (!piece) return;
-    const tile = placementIndex.tileTypes.get(piece.tileId);
-    const outline = pieceShape(piece, tile, { class: 'selection-outline' });
-    if (!valid) outline.style.stroke = '#a34032';
-    layers.selection.append(outline);
-    byId('selected-name').textContent = tile.name;
-    byId('selected-angle').value = Math.round(piece.angle * 10) / 10;
+  function currentSelection() {
+    return selectedIds.size ? project.pieces.filter(piece => selectedIds.has(piece.id)) : [];
+  }
+
+  function singleSelectedPiece() {
+    return selectedIds.size === 1 ? currentSelection()[0] : undefined;
+  }
+
+  function renderSelection() {
+    const pieces = currentSelection();
+    const fragment = document.createDocumentFragment();
+    for (const piece of pieces) {
+      const tile = placementIndex.tileTypes.get(piece.tileId);
+      fragment.append(pieceShape(piece, tile, { class: 'selection-outline' }));
+    }
+    layers.selection.replaceChildren(fragment);
+    byId('selected-panel').hidden = pieces.length === 0;
+    if (!pieces.length) return;
+    const single = pieces.length === 1;
+    byId('selected-title').textContent = single ? 'Valittu pala' : 'Valitut palat';
+    byId('selected-name').textContent = single ? placementIndex.tileTypes.get(pieces[0].tileId).name : pieceCount(pieces.length);
+    byId('selected-angle-field').hidden = !single;
+    byId('rotate').hidden = !single;
+    byId('delete-piece-label').textContent = single ? 'Poista pala' : 'Poista valitut';
+    if (single) byId('selected-angle').value = Math.round(pieces[0].angle * 10) / 10;
   }
 
   function renderView() {
@@ -290,20 +331,26 @@
   }
 
   function setTool(name) {
-    if (gesture) return;
+    if (gesture || (!activeTileId && tileTools.has(name))) return;
     tool = name;
-    stage.dataset.tool = name;
-    document.querySelectorAll('[data-tool].tool').forEach(button => {
-      button.setAttribute('aria-pressed', button.dataset.tool === name);
-    });
-    byId('tool-name').textContent = TOOLS[name][0];
-    byId('tool-hint').textContent = TOOLS[name][1];
-    byId('outline-field').hidden = name !== 'shape';
     if (name !== 'select') {
-      selectedId = null;
+      selectedIds.clear();
       renderSelection();
     }
+    renderTools();
     layers.preview.replaceChildren();
+  }
+
+  function renderTools() {
+    if (!activeTileId && tileTools.has(tool)) tool = 'select';
+    stage.dataset.tool = tool;
+    document.querySelectorAll('[data-tool].tool').forEach(button => {
+      button.setAttribute('aria-pressed', button.dataset.tool === tool);
+      button.disabled = !activeTileId && tileTools.has(button.dataset.tool);
+    });
+    byId('tool-name').textContent = TOOLS[tool][0];
+    byId('tool-hint').textContent = TOOLS[tool][1];
+    byId('outline-field').hidden = tool !== 'shape';
   }
 
   function changeBoard(changes) {
@@ -431,9 +478,11 @@
         index.add(geometry);
       }
     }
+    const shouldStartDrawing = !activeTileId;
     activeTileId = tile.id;
     tileDialog.close();
     commit({ ...project, tiles });
+    if (shouldStartDrawing && !selectedIds.size) setTool('draw');
   }
 
   function surfacePoint(event) {
@@ -531,6 +580,33 @@
     else notify('Valitse kohta, johon mahtuu kokonainen pala.');
   }
 
+  function applySelection(ids) {
+    if (ids.size === selectedIds.size && [...ids].every(id => selectedIds.has(id))) return;
+    selectedIds = ids;
+    renderSelection();
+  }
+
+  function beginSelection(event, origin) {
+    const id = event.target.closest('[data-piece]')?.dataset.piece;
+    if (id && event.shiftKey) {
+      const ids = new Set(selectedIds);
+      if (!ids.delete(id)) ids.add(id);
+      applySelection(ids);
+      return;
+    }
+
+    if (id) {
+      if (!selectedIds.has(id)) applySelection(new Set([id]));
+      const pieces = currentSelection();
+      return { kind: 'move', origin, pieces, anchor: pieces.find(piece => piece.id === id) };
+    }
+
+    const original = selectedIds;
+    const base = event.shiftKey ? original : new Set();
+    applySelection(base);
+    return { kind: 'marquee', origin, original, base };
+  }
+
   function beginPointer(event) {
     if (gesture || (event.button !== 0 && event.button !== 1)) return;
     if (tileDialog.open) return;
@@ -547,14 +623,8 @@
       };
       stage.classList.add('is-panning');
     } else if (tool === 'select') {
-      const element = event.target.closest('[data-piece]');
-      selectedId = element ? element.dataset.piece : null;
-      renderSelection();
-      const selected = currentSelection();
-      if (!selected) return;
-      gesture = {
-        kind: 'move', origin: point, selected, element, index: new Model.PlacementIndex(project, selected.id)
-      };
+      gesture = beginSelection(event, point);
+      if (!gesture) return;
     } else if (tool === 'erase') {
       gesture = { kind: 'erase', previous: point, erased: new Set() };
       const element = event.target.closest('[data-piece]');
@@ -595,6 +665,57 @@
     return { path, points: Model.sampleOutline(tile, project.seam, path) };
   }
 
+  function updateMarquee(current, point) {
+    const { origin, base } = current;
+    const minX = Math.min(origin.x, point.x);
+    const minY = Math.min(origin.y, point.y);
+    const maxX = Math.max(origin.x, point.x);
+    const maxY = Math.max(origin.y, point.y);
+    layers.preview.replaceChildren(svgElement('rect', {
+      x: minX, y: minY, width: maxX - minX, height: maxY - minY, class: 'selection-marquee'
+    }));
+    const ids = new Set(base);
+    for (const piece of placementIndex.piecesWithin({ minX, minY, maxX, maxY })) ids.add(piece.id);
+    applySelection(ids);
+  }
+
+  function translatePiece(piece, { x, y }) {
+    return { ...piece, x: piece.x + x, y: piece.y + y };
+  }
+
+  function previewMove(current, point) {
+    const { anchor, origin, pieces } = current;
+    const dx = point.x - origin.x;
+    const dy = point.y - origin.y;
+    if (!current.index && Math.hypot(dx, dy) < .4) return;
+    if (!current.index) {
+      current.index = new Model.PlacementIndex(project, selectedIds);
+      for (const piece of pieces) pieceElements.get(piece.id).classList.add('moving-piece');
+    }
+    const position = snap({ x: anchor.x + dx, y: anchor.y + dy });
+    const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
+    if (offset.x === current.offset?.x && offset.y === current.offset?.y) return;
+    current.offset = offset;
+    current.valid = (!offset.x && !offset.y) || pieces.every(piece =>
+      current.index.accepts(current.index.geometry(translatePiece(piece, offset))));
+    layers.selection.setAttribute('transform', 'translate(' + offset.x + ' ' + offset.y + ')');
+    layers.selection.classList.toggle('invalid-selection', !current.valid);
+  }
+
+  function finishMove(current, released) {
+    if (!current.index) return;
+    layers.selection.removeAttribute('transform');
+    layers.selection.classList.remove('invalid-selection');
+    for (const piece of current.pieces) pieceElements.get(piece.id)?.classList.remove('moving-piece');
+    if (!released || (!current.offset.x && !current.offset.y)) return;
+    if (!current.valid) {
+      notify(current.pieces.length === 1 ? 'Pala ei mahdu tähän kohtaan.' : 'Valitut palat eivät mahdu tähän kohtaan.');
+      return;
+    }
+    const pieces = project.pieces.map(piece => selectedIds.has(piece.id) ? translatePiece(piece, current.offset) : piece);
+    commit({ ...project, pieces });
+  }
+
   function updateGesture(event) {
     const current = gesture;
     if (!current || current.pointerId !== event.pointerId) return;
@@ -606,15 +727,9 @@
     }
     const point = surfacePoint(event);
     if (current.kind === 'move') {
-      const dx = point.x - current.origin.x;
-      const dy = point.y - current.origin.y;
-      if (!current.candidate && Math.hypot(dx, dy) < .4) return;
-      const position = snap({ x: current.selected.x + dx, y: current.selected.y + dy });
-      const candidate = { ...current.selected, ...position };
-      current.candidate = candidate;
-      current.valid = current.index.accepts(current.index.geometry(candidate));
-      current.element.style.opacity = '.3';
-      renderSelection(candidate, current.valid);
+      previewMove(current, point);
+    } else if (current.kind === 'marquee') {
+      updateMarquee(current, point);
     } else if (current.kind === 'erase') {
       if (point.x === current.previous.x && point.y === current.previous.y) return;
       for (const piece of placementIndex.piecesAlong(current.previous, point)) erasePiece(current, piece.id);
@@ -651,13 +766,11 @@
     layers.preview.replaceChildren();
 
     if (current.kind === 'move') {
-      current.element.style.opacity = '';
-      if (event.type === 'pointerup' && current.candidate && current.valid) {
-        updateSelected(current.candidate);
-      } else {
-        if (event.type === 'pointerup' && current.candidate) notify('Pala ei mahdu tähän kohtaan.');
-        renderSelection();
-      }
+      finishMove(current, event.type === 'pointerup');
+      return;
+    }
+    if (current.kind === 'marquee') {
+      if (event.type !== 'pointerup') applySelection(current.original);
       return;
     }
     if (current.kind === 'erase') {
@@ -688,7 +801,7 @@
   }
 
   function rotateSelected(angle) {
-    const selected = currentSelection();
+    const selected = singleSelectedPiece();
     if (!selected) return;
     if (!Number.isFinite(angle)) {
       renderSelection();
@@ -699,7 +812,7 @@
       renderSelection();
       return;
     }
-    const index = new Model.PlacementIndex(project, selected.id);
+    const index = new Model.PlacementIndex(project, selectedIds);
     if (index.accepts(index.geometry(candidate))) updateSelected(candidate);
     else {
       notify('Pala ei mahdu kääntymään tässä kohdassa.');
@@ -708,9 +821,9 @@
   }
 
   function removeSelected() {
-    if (!currentSelection() || gesture) return;
-    const pieces = project.pieces.filter(piece => piece.id !== selectedId);
-    selectedId = null;
+    if (!selectedIds.size || gesture) return;
+    const pieces = project.pieces.filter(piece => !selectedIds.has(piece.id));
+    selectedIds.clear();
     commit({ ...project, pieces });
   }
 
@@ -767,7 +880,7 @@
       notify('Lopeta käynnissä oleva piirto ja avaa tiedosto uudelleen.');
       return;
     }
-    selectedId = null;
+    selectedIds.clear();
     resetView();
     commit(restored);
     setTool('draw');
@@ -775,9 +888,9 @@
   }
 
   function newProject() {
-    selectedId = null;
+    selectedIds.clear();
     resetView();
-    commit(Model.blankProject(project.tiles));
+    commit(Model.blankProject(project.tiles.filter(tile => !tile.archived)));
     setTool('draw');
     byId('project-name').focus();
     byId('project-name').select();
@@ -815,16 +928,20 @@
       event.preventDefault();
       removeSelected();
     }
-    if (key === 'r' && currentSelection()) rotateSelected(currentSelection().angle + 15);
+    if (key === 'r') rotateByStep();
     if (key === 'escape') {
-      selectedId = null;
-      renderSelection();
+      applySelection(new Set());
     }
   }
 
   function stopSpacePan() {
     spacePressed = false;
     stage.classList.remove('pan-ready');
+  }
+
+  function rotateByStep() {
+    const selected = singleSelectedPiece();
+    if (selected) rotateSelected(selected.angle + 15);
   }
 
   bindSettings();
@@ -838,10 +955,7 @@
   byId('tile-form').addEventListener('submit', saveTile);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
-  byId('rotate').addEventListener('click', () => {
-    const selected = currentSelection();
-    if (selected) rotateSelected(selected.angle + 15);
-  });
+  byId('rotate').addEventListener('click', rotateByStep);
   byId('selected-angle').addEventListener('change', event => rotateSelected(event.target.valueAsNumber));
   byId('delete-piece').addEventListener('click', removeSelected);
   byId('zoom-in').addEventListener('click', () => changeZoom(1.25));

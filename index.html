@@ -135,16 +135,17 @@
       <section class="panel">
         <h2>Palakirjasto</h2>
         <ul id="tile-list" class="tile-list" aria-label="Palatyypit"></ul>
+        <p id="empty-library" class="empty-library" hidden>Palakirjasto on tyhjä.</p>
         <button type="button" id="add-tile-text" class="button add-tile-text"><svg class="icon"><use href="#i-plus"/></svg> Lisää pala</button>
       </section>
 
       <section class="panel selected-panel" id="selected-panel" hidden>
-        <div class="panel-heading"><h2>Valittu pala</h2></div>
+        <div class="panel-heading"><h2 id="selected-title">Valittu pala</h2></div>
         <p id="selected-name"></p>
         <div class="selected-actions">
-          <label class="field">Kierto<span class="number-field"><input type="number" id="selected-angle" step="1" aria-label="Palakulma"><span>°</span></span></label>
+          <label class="field" id="selected-angle-field">Kierto<span class="number-field"><input type="number" id="selected-angle" step="1" aria-label="Palakulma"><span>°</span></span></label>
           <button type="button" id="rotate" class="icon-button" title="Kierrä 15° (R)" aria-label="Kierrä 15 astetta"><svg class="icon"><use href="#i-rotate"/></svg></button>
-          <button type="button" id="delete-piece" class="icon-button delete-button" title="Poista valittu pala" aria-label="Poista valittu pala"><svg class="icon"><use href="#i-delete"/></svg></button>
+          <button type="button" id="delete-piece" class="button delete-button quiet" title="Poista valinta (Delete)"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg><span id="delete-piece-label">Poista pala</span></button>
         </div>
       </section>
       <p class="save-status" id="save-status"></p>

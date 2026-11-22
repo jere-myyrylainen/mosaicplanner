@@ -175,7 +175,7 @@
   }
 
   class PlacementIndex {
-    constructor(project, excludedId) {
+    constructor(project, excludedIds) {
       this.board = project.board;
       this.gap = project.seam;
       this.tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
@@ -183,7 +183,7 @@
       this.geometries = [];
       this.largeGeometries = [];
       for (const piece of project.pieces) {
-        if (piece.id !== excludedId) this.add(this.geometry(piece));
+        if (!excludedIds?.has(piece.id)) this.add(this.geometry(piece));
       }
     }
 
@@ -230,6 +230,13 @@
       };
       for (const geometry of this.nearby(bounds)) {
         if (segmentHits(geometry, start, end, bounds)) yield geometry.piece;
+      }
+    }
+
+    *piecesWithin(bounds) {
+      for (const geometry of this.nearby(bounds)) {
+        if (geometry.minX >= bounds.minX && geometry.maxX <= bounds.maxX &&
+            geometry.minY >= bounds.minY && geometry.maxY <= bounds.maxY) yield geometry.piece;
       }
     }
   }
@@ -356,7 +363,7 @@
         !validNumber(seam, 0, 100) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
         !validNumber(grid.weight, .1, 10)) throw new Error(error);
-    if (!Array.isArray(tiles) || !tiles.length || tiles.length > MAX_TYPES ||
+    if (!Array.isArray(tiles) || tiles.length > MAX_TYPES ||
         !Array.isArray(pieces) || pieces.length > MAX_PIECES) throw new Error(error);
 
     const tileTypes = new Map();
@@ -364,10 +371,11 @@
       if (!tile || !validText(tile.id, 100) || tileTypes.has(tile.id) || !validText(tile.name, 60) ||
           !tileShapes.includes(tile.shape) || !/^#[0-9a-f]{6}$/i.test(tile.color) ||
           !validNumber(tile.width, .5, 10000) || !validNumber(tile.height, .5, 10000) ||
+          (tile.archived !== undefined && typeof tile.archived !== 'boolean') ||
           (tile.shape === 'circle' && tile.width !== tile.height)) throw new Error(error);
       tileTypes.set(tile.id, {
         id: tile.id, name: tile.name.trim(), shape: tile.shape, color: tile.color,
-        width: tile.width, height: tile.height
+        width: tile.width, height: tile.height, ...(tile.archived ? { archived: true } : {})
       });
     }
 
