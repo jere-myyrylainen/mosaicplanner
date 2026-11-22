@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#f9f9f6">
   <title>Mosaic Planner</title>
   <link rel="stylesheet" href="styles.css">
+  <script defer src="i18n.js"></script>
   <script defer src="geometry.js"></script>
   <script defer src="project-storage.js"></script>
   <script defer src="editor.js"></script>
@@ -42,101 +43,105 @@
       <h1>Mosaic Planner</h1>
     </div>
     <div class="project-name">
-      <input id="project-name" type="text" aria-label="Työn nimi" maxlength="80" autocomplete="off" spellcheck="false">
+      <input id="project-name" type="text" data-aria-label="projectName" maxlength="80" autocomplete="off" spellcheck="false">
       <svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg>
     </div>
-    <nav class="file-actions" aria-label="Tiedosto">
-      <button type="button" id="new-project" class="button quiet"><svg class="icon"><use href="#i-plus"/></svg> Uusi</button>
-      <button type="button" id="open-project" class="button quiet"><svg class="icon"><use href="#i-folder"/></svg> Avaa</button>
-      <button type="button" id="save-project" class="button primary"><svg class="icon"><use href="#i-download"/></svg> Tallenna</button>
+    <nav class="file-actions" data-aria-label="fileActions">
+      <button type="button" id="new-project" class="button quiet"><svg class="icon"><use href="#i-plus"/></svg><span data-text="newProject"></span></button>
+      <button type="button" id="open-project" class="button quiet"><svg class="icon"><use href="#i-folder"/></svg><span data-text="openProject"></span></button>
+      <button type="button" id="save-project" class="button primary"><svg class="icon"><use href="#i-download"/></svg><span data-text="saveProject"></span></button>
       <input type="file" id="import-file" accept=".json,application/json" hidden>
     </nav>
+    <select id="language-select" class="language-select" data-aria-label="language" data-title="language">
+      <option value="fi" lang="fi">Suomi</option>
+      <option value="en" lang="en">English</option>
+    </select>
   </header>
 
   <main class="editor">
-    <aside class="settings sidebar" aria-label="Työn asetukset">
+    <aside class="settings sidebar" data-aria-label="projectSettings">
       <section class="panel">
-        <h2>Työn alusta</h2>
+        <h2 data-text="board"></h2>
         <div class="panel-fields">
           <fieldset>
-            <legend>Muoto</legend>
+            <legend data-text="shape"></legend>
             <div class="board-shapes">
-              <label title="Suorakulmio"><input type="radio" name="board-shape" value="rectangle"><span><svg class="icon"><use href="#i-rectangle"/></svg><span class="sr-only">Suorakulmio</span></span></label>
-              <label title="Ympyrä"><input type="radio" name="board-shape" value="circle"><span><svg class="icon"><use href="#i-circle"/></svg><span class="sr-only">Ympyrä</span></span></label>
-              <label title="Pyöristetty suorakulmio"><input type="radio" name="board-shape" value="rounded"><span><svg class="icon"><use href="#i-rounded"/></svg><span class="sr-only">Pyöristetty suorakulmio</span></span></label>
+              <label data-title="rectangle"><input type="radio" name="board-shape" value="rectangle"><span><svg class="icon"><use href="#i-rectangle"/></svg><span class="sr-only" data-text="rectangle"></span></span></label>
+              <label data-title="circle"><input type="radio" name="board-shape" value="circle"><span><svg class="icon"><use href="#i-circle"/></svg><span class="sr-only" data-text="circle"></span></span></label>
+              <label data-title="roundedRectangle"><input type="radio" name="board-shape" value="rounded"><span><svg class="icon"><use href="#i-rounded"/></svg><span class="sr-only" data-text="roundedRectangle"></span></span></label>
             </div>
           </fieldset>
           <div class="fields-row">
-            <label class="field"><span id="board-width-label">Leveys</span><span class="number-field"><input type="number" id="board-width" min="1" max="10000" step="0.1"><span>mm</span></span></label>
-            <label class="field" id="board-height-field">Korkeus<span class="number-field"><input type="number" id="board-height" min="1" max="10000" step="0.1"><span>mm</span></span></label>
+            <label class="field"><span id="board-width-label"></span><span class="number-field"><input type="number" id="board-width" min="1" max="10000" step="0.1"><span>mm</span></span></label>
+            <label class="field" id="board-height-field"><span data-text="height"></span><span class="number-field"><input type="number" id="board-height" min="1" max="10000" step="0.1"><span>mm</span></span></label>
           </div>
-          <label class="field" id="board-radius-field" hidden>Kulmasäde<span class="number-field"><input type="number" id="board-radius" min="0" max="5000" step="0.1"><span>mm</span></span></label>
-          <label class="field">Sauman leveys<span class="number-field"><input type="number" id="seam-width" min="0" max="100" step="0.1"><span>mm</span></span></label>
+          <label class="field" id="board-radius-field" hidden><span data-text="cornerRadius"></span><span class="number-field"><input type="number" id="board-radius" min="0" max="5000" step="0.1"><span>mm</span></span></label>
+          <label class="field"><span data-text="seamWidth"></span><span class="number-field"><input type="number" id="seam-width" min="0" max="100" step="0.1"><span>mm</span></span></label>
         </div>
       </section>
 
       <section class="panel grid-panel">
         <div class="panel-heading">
-          <h2>Apuristikko</h2>
-          <label class="toggle" title="Näytä apuristikko"><input type="checkbox" id="grid-visible" aria-label="Näytä apuristikko"><span></span></label>
+          <h2 data-text="grid"></h2>
+          <label class="toggle" data-title="showGrid"><input type="checkbox" id="grid-visible" data-aria-label="showGrid"><span></span></label>
         </div>
         <div class="panel-fields">
-          <label class="field">Ruudun koko<span class="number-field"><input type="number" id="grid-size" min="0.5" max="1000" step="0.1"><span>mm</span></span></label>
-          <label class="field">Viivan paksuus<span class="number-field"><input type="number" id="grid-weight" min="0.1" max="10" step="0.1"><span>mm</span></span></label>
-          <label class="check-field"><input type="checkbox" id="grid-snap"> Tartu apuristikkoon</label>
+          <label class="field"><span data-text="gridSize"></span><span class="number-field"><input type="number" id="grid-size" min="0.5" max="1000" step="0.1"><span>mm</span></span></label>
+          <label class="field"><span data-text="gridWeight"></span><span class="number-field"><input type="number" id="grid-weight" min="0.1" max="10" step="0.1"><span>mm</span></span></label>
+          <label class="check-field"><input type="checkbox" id="grid-snap"><span data-text="snapToGrid"></span></label>
         </div>
       </section>
       <section class="panel reference-panel">
-        <h2>Apukuvat</h2>
-        <button type="button" id="add-reference" class="button add-reference" title="Lisää JPG- tai PNG-kuva">
-          <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg> Lisää kuva
+        <h2 data-text="references"></h2>
+        <button type="button" id="add-reference" class="button add-reference" data-title="addReferenceTitle">
+          <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span data-text="addReference"></span>
         </button>
         <input type="file" id="reference-file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple hidden>
         <div id="reference-controls" class="panel-fields" hidden>
-          <label class="field">Kuva<select id="reference-select"></select></label>
-          <label class="field">Kuvan leveys<span class="number-field">
+          <label class="field"><span data-text="image"></span><select id="reference-select"></select></label>
+          <label class="field"><span data-text="imageWidth"></span><span class="number-field">
             <input type="number" id="reference-width" min="0.1" step="any"><span>mm</span>
           </span></label>
           <div class="field">
             <div class="reference-opacity-label">
-              <label for="reference-opacity">Peittävyys</label><output id="reference-opacity-value" for="reference-opacity"></output>
+              <label for="reference-opacity" data-text="opacity"></label><output id="reference-opacity-value" for="reference-opacity"></output>
             </div>
             <input type="range" id="reference-opacity" min="0" max="100" step="1">
           </div>
-          <label class="check-field"><input type="checkbox" id="reference-visible"> Näytä kuva</label>
+          <label class="check-field"><input type="checkbox" id="reference-visible"><span data-text="showImage"></span></label>
           <div class="reference-actions">
-            <button type="button" data-tool="reference" class="button tool quiet" title="Siirrä kuvaa vetämällä työalueella">Siirrä kuvaa</button>
-            <button type="button" id="fit-reference" class="button quiet">Sovita alustalle</button>
+            <button type="button" data-tool="reference" class="button tool quiet" data-title="moveImageTitle" data-text="moveImage"></button>
+            <button type="button" id="fit-reference" class="button quiet" data-text="fitImage"></button>
             <button type="button" id="remove-reference" class="button quiet delete-button">
-              <svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg> Poista apukuva
+              <svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg><span data-text="removeReference"></span>
             </button>
           </div>
         </div>
       </section>
     </aside>
 
-    <section class="workspace" aria-label="Mosaiikin piirtoalue">
+    <section class="workspace" data-aria-label="workspace">
       <div class="toolbar">
-        <div class="button-group" role="group" aria-label="Työkalut">
-          <button type="button" class="icon-button tool" data-tool="select" title="Valitse ja siirrä (V tai Esc)" aria-label="Valitse ja siirrä" aria-keyshortcuts="V Escape"><svg class="icon"><use href="#i-pointer"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="draw" title="Aseta pala tai piirrä vapaasti (B)" aria-label="Aseta pala tai piirrä vapaasti"><svg class="icon"><use href="#i-pencil"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="line" title="Viiva (L)" aria-label="Viiva"><svg class="icon"><use href="#i-line"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="shape" title="Muodon ääriviiva (M)" aria-label="Muodon ääriviiva"><svg class="icon"><use href="#i-shape"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="fill" title="Ruudukkotäyttö (G)" aria-label="Ruudukkotäyttö"><svg class="icon"><use href="#i-fill"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="erase" title="Pyyhekumi (E)" aria-label="Pyyhekumi" aria-keyshortcuts="E"><svg class="icon"><use href="#i-eraser"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="pan" title="Siirrä näkymää (H tai välilyönti)" aria-label="Siirrä näkymää"><svg class="icon"><use href="#i-hand"/></svg></button>
+        <div class="button-group" role="group" data-aria-label="tools">
+          <button type="button" class="icon-button tool" data-tool="select" data-title="selectTitle" data-aria-label="selectLabel" aria-keyshortcuts="V Escape"><svg class="icon"><use href="#i-pointer"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="draw" data-title="drawTitle" data-aria-label="drawLabel"><svg class="icon"><use href="#i-pencil"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="line" data-title="lineTitle" data-aria-label="line"><svg class="icon"><use href="#i-line"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="shape" data-title="shapeTitle" data-aria-label="shapeLabel"><svg class="icon"><use href="#i-shape"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="fill" data-title="fillTitle" data-aria-label="fillLabel"><svg class="icon"><use href="#i-fill"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="erase" data-title="eraseTitle" data-aria-label="erase" aria-keyshortcuts="E"><svg class="icon"><use href="#i-eraser"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="pan" data-title="panTitle" data-aria-label="pan"><svg class="icon"><use href="#i-hand"/></svg></button>
         </div>
         <span class="toolbar-divider" aria-hidden="true"></span>
-        <div class="button-group" role="group" aria-label="Muutoshistoria">
-          <button type="button" id="undo" class="icon-button" title="Kumoa (⌘/Ctrl Z)" aria-label="Kumoa"><svg class="icon"><use href="#i-undo"/></svg></button>
-          <button type="button" id="redo" class="icon-button" title="Tee uudelleen (⌘/Ctrl Shift Z)" aria-label="Tee uudelleen"><svg class="icon"><use href="#i-redo"/></svg></button>
+        <div class="button-group" role="group" data-aria-label="history">
+          <button type="button" id="undo" class="icon-button" data-title="undoTitle" data-aria-label="undo"><svg class="icon"><use href="#i-undo"/></svg></button>
+          <button type="button" id="redo" class="icon-button" data-title="redoTitle" data-aria-label="redo"><svg class="icon"><use href="#i-redo"/></svg></button>
         </div>
-        <label id="outline-field" class="outline-mode" hidden><span class="sr-only">Piirrettävä muoto</span><select id="outline-shape"><option value="rectangle">Suorakulmio</option><option value="ellipse">Ellipsi</option></select></label>
+        <label id="outline-field" class="outline-mode" hidden><span class="sr-only" data-text="outlineShape"></span><select id="outline-shape"><option value="rectangle" data-text="rectangle"></option><option value="ellipse" data-text="ellipse"></option></select></label>
         <span class="tool-name" id="tool-name"></span>
       </div>
 
       <div class="stage" id="stage" data-tool="draw">
-        <svg id="canvas" xmlns="http://www.w3.org/2000/svg" aria-label="Mosaiikkialusta" role="img">
+        <svg id="canvas" xmlns="http://www.w3.org/2000/svg" data-aria-label="canvas" role="img">
           <defs>
             <pattern id="grid-pattern" patternUnits="userSpaceOnUse"><path id="grid-lines" fill="none" stroke="#59695e" stroke-opacity=".28"/></pattern>
             <clipPath id="board-clip"></clipPath>
@@ -148,12 +153,12 @@
           <g id="preview-layer" pointer-events="none"></g>
           <g id="selection-layer" pointer-events="none"></g>
         </svg>
-        <div class="zoom-controls" role="group" aria-label="Näkymän suurennus">
-          <button type="button" id="zoom-out" class="icon-button" title="Pienennä" aria-label="Pienennä"><svg class="icon"><use href="#i-minus"/></svg></button>
-          <output id="zoom-level" aria-label="Suurennus">100 %</output>
-          <button type="button" id="zoom-in" class="icon-button" title="Suurenna" aria-label="Suurenna"><svg class="icon"><use href="#i-plus"/></svg></button>
+        <div class="zoom-controls" role="group" data-aria-label="zoomControls">
+          <button type="button" id="zoom-out" class="icon-button" data-title="zoomOut" data-aria-label="zoomOut"><svg class="icon"><use href="#i-minus"/></svg></button>
+          <output id="zoom-level" data-aria-label="zoom">100 %</output>
+          <button type="button" id="zoom-in" class="icon-button" data-title="zoomIn" data-aria-label="zoomIn"><svg class="icon"><use href="#i-plus"/></svg></button>
           <span class="toolbar-divider" aria-hidden="true"></span>
-          <button type="button" id="zoom-fit" class="icon-button" title="Sovita näkymään" aria-label="Sovita näkymään"><svg class="icon"><use href="#i-fit"/></svg></button>
+          <button type="button" id="zoom-fit" class="icon-button" data-title="fitView" data-aria-label="fitView"><svg class="icon"><use href="#i-fit"/></svg></button>
         </div>
       </div>
       <footer class="statusbar">
@@ -161,11 +166,11 @@
         <div class="work-info">
           <p id="work-count"></p>
           <details id="piece-inventory" class="piece-inventory">
-            <summary id="inventory-summary">Palamäärät</summary>
+            <summary id="inventory-summary" data-text="tileInventory"></summary>
             <div class="inventory-panel">
-              <p id="empty-inventory" hidden>Työssä ei ole vielä paloja.</p>
-              <table id="inventory-table" aria-label="Asetettujen palojen määrät">
-                <thead><tr><th scope="col">Palatyyppi</th><th scope="col">Kpl</th></tr></thead>
+              <p id="empty-inventory" hidden data-text="emptyInventory"></p>
+              <table id="inventory-table" data-aria-label="inventoryTable">
+                <thead><tr><th scope="col" data-text="tileType"></th><th scope="col" data-text="quantity"></th></tr></thead>
                 <tbody id="inventory-rows"></tbody>
               </table>
             </div>
@@ -174,47 +179,47 @@
       </footer>
     </section>
 
-    <aside class="library sidebar" id="tile-library" aria-label="Palakirjasto">
+    <aside class="library sidebar" id="tile-library" data-aria-label="tileLibrary">
       <div id="library-resizer" class="library-resizer" role="separator" tabindex="0"
-        aria-label="Palakirjaston leveys" aria-controls="tile-library" aria-orientation="vertical"
-        title="Säädä leveyttä vetämällä. Palauta oletus kaksoisnapsauttamalla."></div>
+        data-aria-label="libraryWidth" aria-controls="tile-library" aria-orientation="vertical"
+        data-title="libraryResize"></div>
       <section class="panel library-panel">
-        <h2>Palakirjasto</h2>
-        <button type="button" id="add-tile-text" class="button add-tile-text"><svg class="icon"><use href="#i-plus"/></svg> Lisää pala</button>
+        <h2 data-text="tileLibrary"></h2>
+        <button type="button" id="add-tile-text" class="button add-tile-text"><svg class="icon"><use href="#i-plus"/></svg><span data-text="addTile"></span></button>
         <details class="library-tools" id="library-tools">
           <summary id="library-tools-summary">
-            <span>Järjestä ja suodata</span>
+            <span data-text="sortFilter"></span>
             <span id="library-filter-count" class="filter-count" hidden></span>
           </summary>
           <div class="library-filters">
-            <label class="field">Järjestys<select id="library-sort">
-              <option value="added">Lisäysjärjestys</option>
-              <option value="name-asc">Nimi A–Ö</option>
-              <option value="name-desc">Nimi Ö–A</option>
+            <label class="field"><span data-text="sortOrder"></span><select id="library-sort">
+              <option value="added" data-text="addedOrder"></option>
+              <option value="name-asc" data-text="nameAscending"></option>
+              <option value="name-desc" data-text="nameDescending"></option>
             </select></label>
-            <label class="field">Koko<select id="library-size"><option value="">Kaikki koot</option></select></label>
-            <label class="field">Väri<select id="library-color"><option value="">Kaikki värit</option></select></label>
+            <label class="field"><span data-text="size"></span><select id="library-size"><option value="" data-text="allSizes"></option></select></label>
+            <label class="field"><span data-text="color"></span><select id="library-color"><option value="" data-text="allColors"></option></select></label>
             <fieldset>
-              <legend>Tunnisteet</legend>
+              <legend data-text="tags"></legend>
               <div id="library-tags" class="filter-chips tag-cloud"></div>
-              <p id="library-no-tags" class="library-note">Lisää tunnisteita palatyypin muokkauksessa.</p>
+              <p id="library-no-tags" class="library-note" data-text="noTags"></p>
             </fieldset>
-            <button type="button" id="clear-library-filters" class="button quiet clear-filters" hidden>Tyhjennä suodattimet</button>
+            <button type="button" id="clear-library-filters" class="button quiet clear-filters" hidden data-text="clearFilters"></button>
           </div>
         </details>
         <p id="library-result" class="library-note" role="status" hidden></p>
         <p id="hidden-drawing-tile" class="library-note" hidden></p>
-        <ul id="tile-list" class="tile-list" aria-label="Palatyypit"></ul>
-        <p id="empty-library" class="empty-library" hidden>Palakirjasto on tyhjä.</p>
+        <ul id="tile-list" class="tile-list" data-aria-label="tileTypes"></ul>
+        <p id="empty-library" class="empty-library" hidden data-text="emptyLibrary"></p>
       </section>
 
       <section class="panel selected-panel" id="selected-panel" hidden>
-        <div class="panel-heading"><h2 id="selected-title">Valittu pala</h2></div>
+        <div class="panel-heading"><h2 id="selected-title"></h2></div>
         <p id="selected-name"></p>
         <div class="selected-actions">
-          <label class="field" id="selected-angle-field">Kierto<span class="number-field"><input type="number" id="selected-angle" step="1" aria-label="Palakulma"><span>°</span></span></label>
-          <button type="button" id="rotate" class="icon-button" title="Kierrä 15° (R)" aria-label="Kierrä 15 astetta"><svg class="icon"><use href="#i-rotate"/></svg></button>
-          <button type="button" id="delete-piece" class="button delete-button quiet" title="Poista valinta (Delete)"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg><span id="delete-piece-label">Poista pala</span></button>
+          <label class="field" id="selected-angle-field"><span data-text="rotation"></span><span class="number-field"><input type="number" id="selected-angle" step="1" data-aria-label="tileAngle"><span>°</span></span></label>
+          <button type="button" id="rotate" class="icon-button" data-title="rotateTitle" data-aria-label="rotateLabel"><svg class="icon"><use href="#i-rotate"/></svg></button>
+          <button type="button" id="delete-piece" class="button delete-button quiet" data-title="deleteSelection"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg><span id="delete-piece-label"></span></button>
         </div>
       </section>
       <p class="save-status" id="save-status"></p>
@@ -225,11 +230,11 @@
 
   <dialog id="new-dialog" aria-labelledby="new-dialog-title" aria-describedby="new-dialog-description">
     <form method="dialog">
-      <h2 id="new-dialog-title">Aloita uusi työ</h2>
-      <p id="new-dialog-description">Uusi työ avautuu tyhjälle alustalle. Voit palata nykyiseen työhön Kumoa-painikkeella.</p>
+      <h2 id="new-dialog-title" data-text="startProject"></h2>
+      <p id="new-dialog-description" data-text="startProjectDescription"></p>
       <div class="dialog-actions">
-        <button type="submit" value="cancel" class="button quiet" autofocus>Peruuta</button>
-        <button type="submit" value="new" class="button primary">Aloita uusi työ</button>
+        <button type="submit" value="cancel" class="button quiet" autofocus data-text="cancel"></button>
+        <button type="submit" value="new" class="button primary" data-text="startProject"></button>
       </div>
     </form>
   </dialog>
@@ -237,27 +242,27 @@
   <dialog id="tile-dialog" aria-labelledby="tile-dialog-title">
     <form id="tile-form">
       <div class="dialog-heading">
-        <h2 id="tile-dialog-title">Lisää palatyyppi</h2>
-        <button type="button" class="icon-button" id="close-dialog" aria-label="Sulje"><svg class="icon"><use href="#i-close"/></svg></button>
+        <h2 id="tile-dialog-title"></h2>
+        <button type="button" class="icon-button" id="close-dialog" data-aria-label="close"><svg class="icon"><use href="#i-close"/></svg></button>
       </div>
-      <label class="field">Nimi<input type="text" id="tile-name" maxlength="60" required autofocus placeholder="Esim. vihreä lasipala"></label>
+      <label class="field"><span data-text="name"></span><input type="text" id="tile-name" maxlength="60" required autofocus data-placeholder="tileNameExample"></label>
       <div class="fields-row">
-        <label class="field">Muoto<select id="tile-shape"><option value="rectangle">Suorakulmio</option><option value="circle">Ympyrä</option><option value="triangle">Kolmio</option></select></label>
-        <label class="field">Väri<input type="color" id="tile-color" value="#347e73"></label>
+        <label class="field"><span data-text="shape"></span><select id="tile-shape"><option value="rectangle" data-text="rectangle"></option><option value="circle" data-text="circle"></option><option value="triangle" data-text="triangle"></option></select></label>
+        <label class="field"><span data-text="color"></span><input type="color" id="tile-color" value="#347e73"></label>
       </div>
       <div class="fields-row">
-        <label class="field"><span id="tile-width-label">Leveys</span><span class="number-field"><input type="number" id="tile-width" min="0.5" max="10000" step="0.1" required><span>mm</span></span></label>
-        <label class="field" id="tile-height-field">Korkeus<span class="number-field"><input type="number" id="tile-height" min="0.5" max="10000" step="0.1" required><span>mm</span></span></label>
+        <label class="field"><span id="tile-width-label"></span><span class="number-field"><input type="number" id="tile-width" min="0.5" max="10000" step="0.1" required><span>mm</span></span></label>
+        <label class="field" id="tile-height-field"><span data-text="height"></span><span class="number-field"><input type="number" id="tile-height" min="0.5" max="10000" step="0.1" required><span>mm</span></span></label>
       </div>
       <div class="field">
-        <label for="tile-tags">Tunnisteet</label>
-        <input type="text" id="tile-tags" maxlength="480" aria-describedby="tile-tags-hint" placeholder="Esim. lasi, ulkokäyttö">
-        <span class="field-hint" id="tile-tags-hint">Erota tunnisteet pilkulla.</span>
+        <label for="tile-tags" data-text="tags"></label>
+        <input type="text" id="tile-tags" maxlength="480" aria-describedby="tile-tags-hint" data-placeholder="tagsExample">
+        <span class="field-hint" id="tile-tags-hint" data-text="tagsHint"></span>
       </div>
       <p class="dialog-error" id="tile-error" role="alert" hidden></p>
       <div class="dialog-actions">
-        <button type="button" id="cancel-tile" class="button quiet">Peruuta</button>
-        <button type="submit" class="button primary">Tallenna pala</button>
+        <button type="button" id="cancel-tile" class="button quiet" data-text="cancel"></button>
+        <button type="submit" class="button primary" data-text="saveTile"></button>
       </div>
     </form>
   </dialog>

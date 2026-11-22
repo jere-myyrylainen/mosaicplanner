@@ -296,10 +296,10 @@
     return points;
   }
 
-  function blankProject(tiles) {
+  function blankProject(tiles, name = 'Nimetön mosaiikki') {
     return {
       version: 1,
-      name: 'Nimetön mosaiikki',
+      name,
       board: { shape: 'circle', width: 200, height: 200, radius: 18 },
       seam: 2,
       grid: { visible: true, size: 12, weight: 0.2, snap: false },
@@ -309,15 +309,14 @@
     };
   }
 
-  function demoProject() {
+  function demoProject(name = 'Kompassiruusu', names = {}) {
     const project = blankProject([
-      { id: 'spruce', name: 'Kuusenvihreä', color: '#285b52' },
-      { id: 'jade', name: 'Salvia', color: '#75a18a' },
-      { id: 'sand', name: 'Hiekka', color: '#e5ca9e' },
-      { id: 'clay', name: 'Terrakotta', color: '#bb684e' },
-      { id: 'ivory', name: 'Luonnonvalkoinen', color: '#f9f0d9' }
-    ].map(tile => ({ ...tile, shape: 'rectangle', width: 10, height: 10 })));
-    project.name = 'Kompassiruusu';
+      { id: 'spruce', name: names.spruce ?? 'Kuusenvihreä', color: '#285b52' },
+      { id: 'jade', name: names.jade ?? 'Salvia', color: '#75a18a' },
+      { id: 'sand', name: names.sand ?? 'Hiekka', color: '#e5ca9e' },
+      { id: 'clay', name: names.clay ?? 'Terrakotta', color: '#bb684e' },
+      { id: 'ivory', name: names.ivory ?? 'Luonnonvalkoinen', color: '#f9f0d9' }
+    ].map(tile => ({ ...tile, shape: 'rectangle', width: 10, height: 10 })), name);
 
     const rows = [
       '       H       ',
@@ -403,19 +402,21 @@
     return tag.toLocaleLowerCase('fi').normalize('NFC');
   }
 
+  class ValidationError extends Error {}
+
   function normalizeTileTags(values) {
-    if (!Array.isArray(values)) throw new Error('Tunnisteiden pitää olla tekstiä.');
+    if (!Array.isArray(values)) throw new ValidationError('invalidTagText');
     const tags = new Map();
     for (const value of values) {
-      if (typeof value !== 'string') throw new Error('Tunnisteiden pitää olla tekstiä.');
+      if (typeof value !== 'string') throw new ValidationError('invalidTagText');
       const tag = value.trim().replace(/\s+/gu, ' ').normalize('NFC');
       if (!tag) continue;
       if (tag.includes(',') || tag.length > 32) {
-        throw new Error('Kussakin tunnisteessa voi olla enintään 32 merkkiä. Erota tunnisteet pilkulla.');
+        throw new ValidationError('invalidTagLength');
       }
       const key = tileTagKey(tag);
       if (!tags.has(key)) tags.set(key, tag);
-      if (tags.size > 12) throw new Error('Palatyypillä voi olla enintään 12 tunnistetta.');
+      if (tags.size > 12) throw new ValidationError('tooManyTags');
     }
     return [...tags.values()];
   }
@@ -441,29 +442,29 @@
   }
 
   function readReferences(values) {
-    const error = 'Työn apukuvat eivät ole kelvollisia JPG- tai PNG-kuvia.';
-    if (!Array.isArray(values) || values.length > MAX_REFERENCES) throw new Error(error);
+    const error = 'invalidReferences';
+    if (!Array.isArray(values) || values.length > MAX_REFERENCES) throw new ValidationError(error);
     const seen = new Set();
     let dataLength = 0;
     return values.map(reference => {
-      if (!reference) throw new Error(error);
+      if (!reference) throw new ValidationError(error);
       const { id, name, source, pixelWidth, pixelHeight, x, y, width, opacity, visible } = reference;
       if (!validText(id, 100) || seen.has(id) || !validText(name, 160) || !validReferenceSource(source) ||
           !validReferenceDimensions(pixelWidth, pixelHeight) ||
           !validNumber(x, -REFERENCE_POSITION_LIMIT, REFERENCE_POSITION_LIMIT) ||
           !validNumber(y, -REFERENCE_POSITION_LIMIT, REFERENCE_POSITION_LIMIT) ||
           !validNumber(width, .1, referenceWidthLimit(pixelWidth, pixelHeight)) ||
-          !validNumber(opacity, 0, 1) || typeof visible !== 'boolean') throw new Error(error);
+          !validNumber(opacity, 0, 1) || typeof visible !== 'boolean') throw new ValidationError(error);
       dataLength += source.length;
-      if (dataLength > MAX_REFERENCE_DATA) throw new Error('Työssä on liian paljon apukuvadataa.');
+      if (dataLength > MAX_REFERENCE_DATA) throw new ValidationError('tooMuchReferenceData');
       seen.add(id);
       return { id, name, source, pixelWidth, pixelHeight, x, y, width, opacity, visible };
     });
   }
 
   function readProject(value) {
-    const error = 'Tiedosto ei ole kelvollinen Mosaic Planner -työ.';
-    if (!value || value.version !== 1 || !validText(value.name, 80)) throw new Error(error);
+    const error = 'invalidProject';
+    if (!value || value.version !== 1 || !validText(value.name, 80)) throw new ValidationError(error);
     const { board, grid, tiles, pieces, seam } = value;
     if (!board || !boardShapes.includes(board.shape) ||
         !validNumber(board.width, 1, 10000) || !validNumber(board.height, 1, 10000) ||
@@ -471,9 +472,9 @@
         (board.shape === 'circle' && board.width !== board.height) ||
         !validNumber(seam, 0, 100) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
-        !validNumber(grid.weight, .1, 10)) throw new Error(error);
+        !validNumber(grid.weight, .1, 10)) throw new ValidationError(error);
     if (!Array.isArray(tiles) || tiles.length > MAX_TYPES ||
-        !Array.isArray(pieces) || pieces.length > MAX_PIECES) throw new Error(error);
+        !Array.isArray(pieces) || pieces.length > MAX_PIECES) throw new ValidationError(error);
 
     const tileTypes = new Map();
     for (const tile of tiles) {
@@ -481,12 +482,12 @@
           !tileShapes.includes(tile.shape) || typeof tile.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(tile.color) ||
           !validNumber(tile.width, .5, 10000) || !validNumber(tile.height, .5, 10000) ||
           (tile.archived !== undefined && typeof tile.archived !== 'boolean') ||
-          (tile.shape === 'circle' && tile.width !== tile.height)) throw new Error(error);
+          (tile.shape === 'circle' && tile.width !== tile.height)) throw new ValidationError(error);
       let tags;
       try {
         tags = tile.tags === undefined ? [] : normalizeTileTags(tile.tags);
       } catch {
-        throw new Error(error);
+        throw new ValidationError(error);
       }
       tileTypes.set(tile.id, {
         id: tile.id, name: tile.name.trim(), shape: tile.shape, color: tile.color,
@@ -506,10 +507,10 @@
     for (const piece of pieces) {
       if (!piece || !validText(piece.id, 100) || ids.has(piece.id) || !tileTypes.has(piece.tileId) ||
           !validNumber(piece.x, -5000, 5000) || !validNumber(piece.y, -5000, 5000) ||
-          !validNumber(piece.angle, -360, 360)) throw new Error(error);
+          !validNumber(piece.angle, -360, 360)) throw new ValidationError(error);
       const clean = { id: piece.id, tileId: piece.tileId, x: piece.x, y: piece.y, angle: angleInDegrees(piece.angle) };
       const geometry = index.geometry(clean);
-      if (!index.accepts(geometry)) throw new Error('Työssä on päällekkäisiä tai alustan ulkopuolisia paloja.');
+      if (!index.accepts(geometry)) throw new ValidationError('invalidPlacements');
       index.add(geometry);
       ids.add(piece.id);
       restored.pieces.push(clean);
@@ -519,7 +520,7 @@
 
   const model = {
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
-    REFERENCE_POSITION_LIMIT, PlacementIndex, angleInDegrees, blankProject, colorFamilies, demoProject,
+    REFERENCE_POSITION_LIMIT, PlacementIndex, ValidationError, angleInDegrees, blankProject, colorFamilies, demoProject,
     fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
     referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, validNumber, validReferenceDimensions
   };

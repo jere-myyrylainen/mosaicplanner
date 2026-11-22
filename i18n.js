@@ -1,0 +1,264 @@
+(function () {
+  'use strict';
+
+  const LANGUAGE_KEY = 'mosaic-planner.language';
+  const messages = {
+    language: ["Kieli", "Language"],
+    projectName: ["Työn nimi", "Project name"],
+    fileActions: ["Tiedosto", "File actions"],
+    newProject: ["Uusi", "New"],
+    openProject: ["Avaa", "Open"],
+    saveProject: ["Tallenna", "Save"],
+    projectSettings: ["Työn asetukset", "Project settings"],
+    board: ["Työn alusta", "Board"],
+    shape: ["Muoto", "Shape"],
+    rectangle: ["Suorakulmio", "Rectangle"],
+    circle: ["Ympyrä", "Circle"],
+    roundedRectangle: ["Pyöristetty suorakulmio", "Rounded rectangle"],
+    width: ["Leveys", "Width"],
+    height: ["Korkeus", "Height"],
+    cornerRadius: ["Kulmasäde", "Corner radius"],
+    seamWidth: ["Sauman leveys", "Grout gap"],
+    grid: ["Apuristikko", "Guide grid"],
+    showGrid: ["Näytä apuristikko", "Show guide grid"],
+    gridSize: ["Ruudun koko", "Grid spacing"],
+    gridWeight: ["Viivan paksuus", "Line thickness"],
+    snapToGrid: ["Tartu apuristikkoon", "Snap to grid"],
+    references: ["Apukuvat", "Reference images"],
+    addReferenceTitle: ["Lisää JPG- tai PNG-kuva", "Add a JPG or PNG image"],
+    addReference: ["Lisää kuva", "Add image"],
+    image: ["Kuva", "Image"],
+    imageWidth: ["Kuvan leveys", "Image width"],
+    opacity: ["Peittävyys", "Opacity"],
+    showImage: ["Näytä kuva", "Show image"],
+    moveImageTitle: ["Siirrä kuvaa vetämällä työalueella", "Drag on the canvas to move the image"],
+    moveImage: ["Siirrä kuvaa", "Move image"],
+    fitImage: ["Sovita alustalle", "Fit to board"],
+    removeReference: ["Poista apukuva", "Remove image"],
+    workspace: ["Mosaiikin piirtoalue", "Mosaic workspace"],
+    tools: ["Työkalut", "Tools"],
+    selectTitle: ["Valitse ja siirrä (V tai Esc)", "Select and move (V or Esc)"],
+    selectLabel: ["Valitse ja siirrä", "Select and move"],
+    drawTitle: ["Aseta pala tai piirrä vapaasti (B)", "Place tiles or draw freehand (B)"],
+    drawLabel: ["Aseta pala tai piirrä vapaasti", "Place tiles or draw freehand"],
+    lineTitle: ["Viiva (L)", "Line (L)"],
+    line: ["Viiva", "Line"],
+    shapeTitle: ["Muodon ääriviiva (M)", "Shape outline (M)"],
+    shapeLabel: ["Muodon ääriviiva", "Shape outline"],
+    fillTitle: ["Ruudukkotäyttö (G)", "Grid fill (G)"],
+    fillLabel: ["Ruudukkotäyttö", "Grid fill"],
+    eraseTitle: ["Pyyhekumi (E)", "Eraser (E)"],
+    erase: ["Pyyhekumi", "Eraser"],
+    panTitle: ["Siirrä näkymää (H tai välilyönti)", "Pan (H or Space)"],
+    pan: ["Siirrä näkymää", "Pan"],
+    history: ["Muutoshistoria", "Edit history"],
+    undoTitle: ["Kumoa (⌘/Ctrl Z)", "Undo (⌘/Ctrl Z)"],
+    undo: ["Kumoa", "Undo"],
+    redoTitle: ["Tee uudelleen (⌘/Ctrl Shift Z)", "Redo (⌘/Ctrl Shift Z)"],
+    redo: ["Tee uudelleen", "Redo"],
+    outlineShape: ["Piirrettävä muoto", "Outline shape"],
+    ellipse: ["Ellipsi", "Ellipse"],
+    canvas: ["Mosaiikkialusta", "Mosaic board"],
+    zoomControls: ["Näkymän suurennus", "Zoom controls"],
+    zoomOut: ["Pienennä", "Zoom out"],
+    zoom: ["Suurennus", "Zoom"],
+    zoomIn: ["Suurenna", "Zoom in"],
+    fitView: ["Sovita näkymään", "Fit to view"],
+    tileInventory: ["Palamäärät", "Tile counts"],
+    emptyInventory: ["Työssä ei ole vielä paloja.", "This project has no placed tiles yet."],
+    inventoryTable: ["Asetettujen palojen määrät", "Placed tile counts"],
+    tileType: ["Palatyyppi", "Tile type"],
+    quantity: ["Kpl", "Qty"],
+    tileLibrary: ["Palakirjasto", "Tile library"],
+    libraryWidth: ["Palakirjaston leveys", "Tile library width"],
+    libraryResize: ["Säädä leveyttä vetämällä. Palauta oletus kaksoisnapsauttamalla.", "Drag to resize. Double-click to reset."],
+    addTile: ["Lisää pala", "Add tile"],
+    sortFilter: ["Järjestä ja suodata", "Sort and filter"],
+    sortOrder: ["Järjestys", "Sort order"],
+    addedOrder: ["Lisäysjärjestys", "Order added"],
+    nameAscending: ["Nimi A–Ö", "Name A–Z"],
+    nameDescending: ["Nimi Ö–A", "Name Z–A"],
+    size: ["Koko", "Size"],
+    allSizes: ["Kaikki koot", "All sizes"],
+    color: ["Väri", "Color"],
+    allColors: ["Kaikki värit", "All colors"],
+    tags: ["Tunnisteet", "Tags"],
+    noTags: ["Lisää tunnisteita palatyypin muokkauksessa.", "Add tags when editing a tile type."],
+    clearFilters: ["Tyhjennä suodattimet", "Clear filters"],
+    tileTypes: ["Palatyypit", "Tile types"],
+    emptyLibrary: ["Palakirjasto on tyhjä.", "The tile library is empty."],
+    selectedTile: ["Valittu pala", "Selected tile"],
+    rotation: ["Kierto", "Rotation"],
+    tileAngle: ["Palakulma", "Tile angle"],
+    rotateTitle: ["Kierrä 15° (R)", "Rotate 15° (R)"],
+    rotateLabel: ["Kierrä 15 astetta", "Rotate 15 degrees"],
+    deleteSelection: ["Poista valinta (Delete)", "Delete selection (Delete)"],
+    deleteTile: ["Poista pala", "Delete tile"],
+    startProject: ["Aloita uusi työ", "Start a new project"],
+    startProjectDescription: ["Uusi työ avautuu tyhjälle alustalle. Voit palata nykyiseen työhön Kumoa-painikkeella.", "The new project starts with an empty board. Use Undo to return to the current project."],
+    cancel: ["Peruuta", "Cancel"],
+    addTileType: ["Lisää palatyyppi", "Add tile type"],
+    close: ["Sulje", "Close"],
+    name: ["Nimi", "Name"],
+    tileNameExample: ["Esim. vihreä lasipala", "e.g. Green glass tile"],
+    triangle: ["Kolmio", "Triangle"],
+    tagsExample: ["Esim. lasi, ulkokäyttö", "e.g. glass, outdoor"],
+    tagsHint: ["Erota tunnisteet pilkulla.", "Separate tags with commas."],
+    saveTile: ["Tallenna pala", "Save tile"],
+    select: ["Valitse", "Select"],
+    draw: ["Vapaa piirto", "Freehand"],
+    fill: ["Täyttö", "Fill"],
+    reference: ["Siirrä apukuvaa", "Move reference image"],
+    selectHint: ["Rajaa palat vetämällä tyhjästä kohdasta tai valitse ne Shift-napsautuksilla. Siirrä valintaa vetämällä palasta.", "Drag from an empty spot to select multiple tiles, or Shift-click individual tiles. Drag a selected tile to move the selection."],
+    drawHint: ["Aseta pala napsauttamalla. Piirrä vetämällä.", "Click to place a tile. Drag to draw."],
+    lineHint: ["Vedä viivan alusta loppuun.", "Drag from one end of the line to the other."],
+    shapeHint: ["Vedä muodon vastakkaisten kulmien välillä.", "Drag between opposite corners of the shape."],
+    fillHint: ["Napsauta tyhjää aluetta, jonka haluat täyttää.", "Click the empty area you want to fill."],
+    eraseHint: ["Poista pala napsauttamalla tai poista useita paloja vetämällä.", "Click to erase one tile or drag to erase several."],
+    referenceHint: ["Vedä työalueella siirtääksesi apukuvaa. Esc palauttaa valintatyökalun.", "Drag on the canvas to move the reference image. Press Esc to return to the selection tool."],
+    panHint: ["Siirrä näkymää vetämällä.", "Drag to pan."],
+    red: ["Punaiset", "Reds"],
+    orange: ["Oranssit", "Oranges"],
+    yellow: ["Keltaiset", "Yellows"],
+    green: ["Vihreät", "Greens"],
+    teal: ["Turkoosit", "Teals"],
+    blue: ["Siniset", "Blues"],
+    purple: ["Violetit", "Purples"],
+    pink: ["Pinkit", "Pinks"],
+    brown: ["Ruskeat", "Browns"],
+    white: ["Valkoiset", "Whites"],
+    gray: ["Harmaat", "Grays"],
+    black: ["Mustat", "Blacks"],
+    pixelWidth: ["{count} pikseliä", "{count} pixels"],
+    saving: ["Tallennetaan tähän selaimeen…", "Saving to this browser…"],
+    saved: ["Tallennettu tähän selaimeen", "Saved to this browser"],
+    saveFailed: ["Paikallinen tallennus ei onnistu. Tallenna työ tiedostoksi.", "Local saving failed. Save the project as a file."],
+    loadFailed: ["Selaimeen tallennettua työtä ei voitu avata.", "Could not open the project saved in this browser."],
+    referenceFileTooLarge: ["Apukuva saa olla enintään 12 Mt.", "A reference image can be up to 12 MB."],
+    referenceFileType: ["Valitse JPG- tai PNG-kuva.", "Choose a JPG or PNG image."],
+    referenceOpenFailed: ["Kuvan avaaminen ei onnistunut.", "Could not open the image."],
+    referenceDimensions: ["Apukuvan pikselimitat ovat liian suuret.", "The reference image is too large in pixels."],
+    referenceReadFailed: ["Kuvan lukeminen ei onnistunut.", "Could not read the image."],
+    tooManyReferences: ["Työhön mahtuu enintään {maximum} apukuvaa.", "A project can have up to {maximum} reference images."],
+    referenceName: ["Apukuva", "Reference image"],
+    referenceDragActive: ["Lopeta käynnissä oleva veto ja lisää apukuvat uudelleen.", "Finish dragging, then add the reference images again."],
+    referenceStorageFull: ["Työn apukuville varattu tila on täynnä.", "This project has reached its reference image storage limit."],
+    referenceAdded: ["Apukuva lisättiin.", "Reference image added."],
+    referencesAdded: ["Lisättiin {count} apukuvaa.", "Added {count} reference images."],
+    referenceRemoved: ["Apukuva poistettiin.", "Reference image removed."],
+    oneTile: ["{count} pala", "{count} tile"],
+    manyTiles: ["{count} palaa", "{count} tiles"],
+    diameter: ["Halkaisija", "Diameter"],
+    tagOneTileType: ["{tag}, {count} palatyyppi", "{tag}, {count} tile type"],
+    tagManyTileTypes: ["{tag}, {count} palatyyppiä", "{tag}, {count} tile types"],
+    oneFilter: ["{count} suodatin", "{count} filter"],
+    manyFilters: ["{count} suodatinta", "{count} filters"],
+    editTileType: ["Muokkaa palatyyppiä", "Edit tile type"],
+    editNamedTile: ["Muokkaa palatyyppiä {name}", "Edit tile type {name}"],
+    removeTileType: ["Poista palakirjastosta", "Remove from library"],
+    removeNamedTile: ["Poista palakirjastosta {name}", "Remove {name} from library"],
+    libraryResult: ["{visible} / {total} palatyyppiä", "{visible} of {total} tile types"],
+    noFilterMatches: ["Suodattimilla ei löytynyt paloja.", "No tiles match the filters."],
+    hiddenDrawingTile: ["Piirtopala on {name}.", "The active drawing tile is {name}."],
+    removedTileInUse: ["Palatyyppi poistettiin kirjastosta. Asetetut palat ovat edelleen työssä.", "Tile type removed from the library. Placed tiles remain on the board."],
+    removedTileType: ["Palatyyppi poistettiin kirjastosta.", "Tile type removed from the library."],
+    selectedTiles: ["Valitut palat", "Selected tiles"],
+    deleteSelectedTiles: ["Poista valitut", "Delete selected"],
+    boardChangeBlocked: ["Osa paloista jäisi alustan ulkopuolelle. Siirrä tai poista ne ennen muutosta.", "Some tiles would fall outside the board. Move or remove them before changing the board."],
+    invalidNumber: ["Anna arvo väliltä {min}–{max}.", "Enter a value between {min} and {max}."],
+    untitledProject: ["Nimetön mosaiikki", "Untitled mosaic"],
+    demoProject: ["Kompassiruusu", "Compass rose"],
+    demoSpruce: ["Kuusenvihreä", "Spruce green"],
+    demoJade: ["Salvia", "Sage"],
+    demoSand: ["Hiekka", "Sand"],
+    demoClay: ["Terrakotta", "Terracotta"],
+    demoIvory: ["Luonnonvalkoinen", "Ivory"],
+    seamChanged: ["Sauman leveys muuttui seuraavia asetteluja varten.", "The new grout gap applies to tiles you place from now on."],
+    tooManyTileTypes: ["Palakirjastossa voi olla enintään {count} palatyyppiä.", "The library can hold up to {count} tile types."],
+    tileNameRequired: ["Anna palatyypille nimi.", "Enter a name for the tile type."],
+    tileEditBlocked: ["Tällä koolla tai muodolla asetetut palat eivät mahdu nykyisille paikoilleen.", "With this size or shape, placed tiles no longer fit in their current positions."],
+    addedOneTile: ["Toiminnolla lisättiin {count} pala.", "Placed {count} tile."],
+    addedManyTiles: ["Toiminnolla lisättiin {count} palaa.", "Placed {count} tiles."],
+    tooManyTiles: ["Työssä on jo enimmäismäärä paloja.", "This project has reached its tile limit."],
+    fillStartBlocked: ["Valitse kohta, johon mahtuu kokonainen pala.", "Choose a spot with room for a whole tile."],
+    tilePlacementBlocked: ["Pala ei mahdu tähän kohtaan.", "The tile does not fit here."],
+    tilesPlacementBlocked: ["Valitut palat eivät mahdu tähän kohtaan.", "The selected tiles do not fit here."],
+    linePlacementBlocked: ["Valitulle viivalle ei mahtunut paloja.", "No tiles fit along this line."],
+    rotationBlocked: ["Pala ei mahdu kääntymään tässä kohdassa.", "There is not enough room to rotate the tile here."],
+    projectExported: ["Työ tallennettiin JSON-tiedostoksi.", "Project saved as a JSON file."],
+    projectFileTooLarge: ["Valitse enintään 32 Mt:n kokoinen Mosaic Planner -tiedosto.", "Choose a Mosaic Planner file up to 32 MB in size."],
+    invalidJson: ["Tiedostoa ei voitu lukea JSON-muodossa.", "Could not read the file as JSON."],
+    projectDragActive: ["Lopeta käynnissä oleva piirto ja avaa tiedosto uudelleen.", "Finish drawing, then open the file again."],
+    projectOpened: ["Työ avattu.", "Project opened."],
+    invalidTagText: ["Tunnisteiden pitää olla tekstiä.", "Tags must be text."],
+    invalidTagLength: ["Kussakin tunnisteessa voi olla enintään 32 merkkiä. Erota tunnisteet pilkulla.", "Each tag can be up to 32 characters. Separate tags with commas."],
+    tooManyTags: ["Palatyypillä voi olla enintään 12 tunnistetta.", "A tile type can have up to 12 tags."],
+    invalidReferences: ["Työn apukuvat eivät ole kelvollisia JPG- tai PNG-kuvia.", "The project's reference images are not valid JPG or PNG images."],
+    tooMuchReferenceData: ["Työssä on liian paljon apukuvadataa.", "This project contains too much reference image data."],
+    invalidProject: ["Tiedosto ei ole kelvollinen Mosaic Planner -työ.", "This file is not a valid Mosaic Planner project."],
+    invalidPlacements: ["Työssä on päällekkäisiä tai alustan ulkopuolisia paloja.", "The project contains tiles that overlap or extend beyond the board."],
+  };
+
+  const attributes = ['aria-label', 'title', 'placeholder'];
+  let language = 'fi';
+  let numberFormat;
+  let countFormat;
+  let percentFormat;
+  let collator;
+
+  function text(key, values) {
+    const message = messages[key][language === 'fi' ? 0 : 1];
+    if (!values) return message;
+    return message.replace(/\{(\w+)\}/g, (_, name) => {
+      const value = values[name];
+      return typeof value === 'number' ? numberFormat.format(value) : value;
+    });
+  }
+
+  function apply(next) {
+    language = next === 'en' ? 'en' : 'fi';
+    const locale = language === 'en' ? 'en-US' : 'fi-FI';
+    numberFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+    countFormat = new Intl.NumberFormat(locale);
+    percentFormat = new Intl.NumberFormat(locale, { style: 'percent' });
+    collator = new Intl.Collator(locale, { sensitivity: 'base', numeric: true });
+    document.documentElement.lang = language;
+    document.getElementById('language-select').value = language;
+    for (const element of document.querySelectorAll('[data-text]')) {
+      element.textContent = text(element.dataset.text);
+    }
+    for (const attribute of attributes) {
+      const source = 'data-' + attribute;
+      for (const element of document.querySelectorAll('[' + source + ']')) {
+        element.setAttribute(attribute, text(element.getAttribute(source)));
+      }
+    }
+  }
+
+  function initialize() {
+    let saved;
+    try {
+      saved = localStorage.getItem(LANGUAGE_KEY);
+    } catch {
+      // The editor can still switch languages for this session.
+    }
+    apply(saved);
+  }
+
+  function choose(next) {
+    apply(next);
+    try {
+      localStorage.setItem(LANGUAGE_KEY, language);
+    } catch {
+      // The editor can still switch languages for this session.
+    }
+  }
+
+  window.MosaicI18n = {
+    initialize, choose, text,
+    number: value => numberFormat.format(value),
+    count: value => countFormat.format(value),
+    percent: value => percentFormat.format(value),
+    compare: (a, b) => collator.compare(a, b)
+  };
+}());

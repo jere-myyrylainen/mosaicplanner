@@ -3,26 +3,16 @@
 
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
+  const I18n = window.MosaicI18n;
+  const t = I18n.text;
   const MAX_PROJECT_FILE = 32 * 1024 * 1024;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const LIBRARY_WIDTH_KEY = 'mosaic-planner.library-width';
   const SVG = 'http://www.w3.org/2000/svg';
-  const TOOLS = {
-    select: ['Valitse', 'Rajaa palat vetämällä tyhjästä kohdasta tai valitse ne Shift-napsautuksilla. Siirrä valintaa vetämällä palasta.'],
-    draw: ['Vapaa piirto', 'Aseta pala napsauttamalla. Piirrä vetämällä.'],
-    line: ['Viiva', 'Vedä viivan alusta loppuun.'],
-    shape: ['Muoto', 'Vedä muodon vastakkaisten kulmien välillä.'],
-    fill: ['Täyttö', 'Napsauta tyhjää aluetta, jonka haluat täyttää.'],
-    erase: ['Pyyhekumi', 'Poista pala napsauttamalla tai poista useita paloja vetämällä.'],
-    reference: ['Siirrä apukuvaa', 'Vedä työalueella siirtääksesi apukuvaa. Esc palauttaa valintatyökalun.'],
-    pan: ['Siirrä näkymää', 'Siirrä näkymää vetämällä.']
-  };
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
-  const colorLabels = new Map([
-    ['red', 'Punaiset'], ['orange', 'Oranssit'], ['yellow', 'Keltaiset'], ['green', 'Vihreät'],
-    ['teal', 'Turkoosit'], ['blue', 'Siniset'], ['purple', 'Violetit'], ['pink', 'Pinkit'],
-    ['brown', 'Ruskeat'], ['white', 'Valkoiset'], ['gray', 'Harmaat'], ['black', 'Mustat']
-  ]);
+  const colorFamilies = [
+    'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'white', 'gray', 'black'
+  ];
 
   const byId = id => document.getElementById(id);
   const editor = document.querySelector('.editor');
@@ -42,18 +32,20 @@
   const library = byId('tile-library');
   const libraryResizer = byId('library-resizer');
   const stackedLayout = window.matchMedia('(max-width: 760px)');
-  const format = new Intl.NumberFormat('fi-FI', { maximumFractionDigits: 2 });
-  const countFormat = new Intl.NumberFormat('fi-FI');
-  const nameOrder = new Intl.Collator('fi-FI', { sensitivity: 'base', numeric: true });
   const past = [];
   const future = [];
   const pieceElements = new Map();
   const referenceElements = new Map();
   const libraryFilters = { size: '', color: '', tags: new Set() };
 
-  let project = Model.demoProject();
+  I18n.initialize();
+  let project = Model.demoProject(t('demoProject'), {
+    spruce: t('demoSpruce'), jade: t('demoJade'), sand: t('demoSand'),
+    clay: t('demoClay'), ivory: t('demoIvory')
+  });
   let projectGeneration = 0;
   let saveGeneration = 0;
+  let saveStatus;
   let activeReferenceId;
   let renderedReferences;
   let addingReferences = false;
@@ -71,6 +63,8 @@
   let gesture = null;
   let spacePressed = false;
   let feedbackTimer;
+  let feedbackMessages;
+  let feedbackValues;
   let zoom = 1;
   let viewCenter = { x: 0, y: 0 };
   let idSequence = 0;
@@ -124,7 +118,7 @@
     libraryResizer.setAttribute('aria-valuemin', limits.min);
     libraryResizer.setAttribute('aria-valuemax', limits.max);
     libraryResizer.setAttribute('aria-valuenow', actualWidth);
-    libraryResizer.setAttribute('aria-valuetext', actualWidth + ' pikseliä');
+    libraryResizer.setAttribute('aria-valuetext', t('pixelWidth', { count: actualWidth }));
   }
 
   function moveLibraryResize(event) {
@@ -197,13 +191,12 @@
 
   async function persist() {
     const generation = ++saveGeneration;
-    const status = byId('save-status');
-    status.textContent = 'Tallennetaan tähän selaimeen…';
+    setSaveStatus('saving');
     try {
       await Storage.save(project);
-      if (generation === saveGeneration) status.textContent = 'Tallennettu tähän selaimeen';
+      if (generation === saveGeneration) setSaveStatus('saved');
     } catch {
-      if (generation === saveGeneration) status.textContent = 'Paikallinen tallennus ei onnistu. Tallenna työ tiedostoksi.';
+      if (generation === saveGeneration) setSaveStatus('saveFailed');
     }
   }
 
@@ -247,9 +240,20 @@
     useProject(future.pop());
   }
 
-  function notify(message) {
+  function setSaveStatus(key) {
+    saveStatus = key;
+    byId('save-status').textContent = t(key);
+  }
+
+  function renderFeedback() {
+    byId('feedback').textContent = feedbackMessages.map(key => t(key, feedbackValues)).join(' ');
+  }
+
+  function notify(keys, values) {
     const feedback = byId('feedback');
-    feedback.textContent = message;
+    feedbackMessages = [].concat(keys);
+    feedbackValues = values;
+    renderFeedback();
     feedback.hidden = false;
     clearTimeout(feedbackTimer);
     feedbackTimer = setTimeout(() => { feedback.hidden = true; }, 4200);
@@ -355,7 +359,7 @@
     width.max = Model.referenceWidthLimit(selected.pixelWidth, selected.pixelHeight);
     width.value = Number(selected.width.toFixed(3));
     byId('reference-opacity').value = Math.round(selected.opacity * 100);
-    byId('reference-opacity-value').textContent = Math.round(selected.opacity * 100) + ' %';
+    byId('reference-opacity-value').textContent = I18n.percent(selected.opacity);
     byId('reference-visible').checked = selected.visible;
   }
 
@@ -372,13 +376,17 @@
     commit({ ...project, references });
   }
 
+  function validationKey(error, fallback) {
+    return error instanceof Model.ValidationError ? error.message : fallback;
+  }
+
   async function readReferenceFile(file) {
-    if (file.size > Model.MAX_REFERENCE_FILE) throw new Error('Apukuva saa olla enintään 12 Mt.');
+    if (file.size > Model.MAX_REFERENCE_FILE) throw new Model.ValidationError('referenceFileTooLarge');
     const bytes = new Uint8Array(await file.slice(0, 8).arrayBuffer());
     const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
     const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
     const png = pngSignature.every((byte, index) => bytes[index] === byte);
-    if (!jpeg && !png) throw new Error('Valitse JPG- tai PNG-kuva.');
+    if (!jpeg && !png) throw new Model.ValidationError('referenceFileType');
 
     const blob = new Blob([file], { type: jpeg ? 'image/jpeg' : 'image/png' });
     const url = URL.createObjectURL(blob);
@@ -387,19 +395,19 @@
       dimensions = await new Promise((resolve, reject) => {
         const image = new Image();
         image.onload = () => resolve({ pixelWidth: image.naturalWidth, pixelHeight: image.naturalHeight });
-        image.onerror = () => reject(new Error('Kuvan avaaminen ei onnistunut.'));
+        image.onerror = () => reject(new Model.ValidationError('referenceOpenFailed'));
         image.src = url;
       });
     } finally {
       URL.revokeObjectURL(url);
     }
     if (!Model.validReferenceDimensions(dimensions.pixelWidth, dimensions.pixelHeight)) {
-      throw new Error('Apukuvan pikselimitat ovat liian suuret.');
+      throw new Model.ValidationError('referenceDimensions');
     }
     const source = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('Kuvan lukeminen ei onnistunut.'));
+      reader.onerror = () => reject(new Model.ValidationError('referenceReadFailed'));
       reader.readAsDataURL(blob);
     });
     return { source, ...dimensions };
@@ -420,29 +428,29 @@
       for (const file of files) {
         if (generation !== projectGeneration) return;
         if (project.references.length + images.length >= Model.MAX_REFERENCES) {
-          problems.push('Työhön mahtuu enintään ' + Model.MAX_REFERENCES + ' apukuvaa.');
+          problems.push('tooManyReferences');
           break;
         }
         try {
-          images.push({ ...await readReferenceFile(file), name: file.name.trim().slice(0, 160) || 'Apukuva' });
+          images.push({ ...await readReferenceFile(file), name: file.name.trim().slice(0, 160) });
         } catch (error) {
-          problems.push(error.message);
+          problems.push(validationKey(error, 'referenceReadFailed'));
         }
       }
       if (generation !== projectGeneration) return;
       if (gesture) {
-        notify('Lopeta käynnissä oleva veto ja lisää apukuvat uudelleen.');
+        notify('referenceDragActive');
         return;
       }
       const references = [...project.references];
       let totalSize = references.reduce((size, reference) => size + reference.source.length, 0);
       for (const image of images) {
         if (totalSize + image.source.length > Model.MAX_REFERENCE_DATA) {
-          problems.push('Työn apukuville varattu tila on täynnä.');
+          problems.push('referenceStorageFull');
           continue;
         }
         totalSize += image.source.length;
-        references.push({ ...image, id: nextId('reference'), ...fittedReference(image), opacity: .5, visible: true });
+        references.push({ ...image, name: image.name || t('referenceName'), id: nextId('reference'), ...fittedReference(image), opacity: .5, visible: true });
       }
       const added = references.length - project.references.length;
       if (added) {
@@ -450,8 +458,9 @@
         commit({ ...project, references });
         byId('reference-controls').scrollIntoView({ block: 'nearest' });
       }
-      const success = added === 1 ? 'Apukuva lisättiin.' : 'Lisättiin ' + countFormat.format(added) + ' apukuvaa.';
-      notify([added ? success : '', ...new Set(problems)].filter(Boolean).join(' '));
+      const messages = [...new Set(problems)];
+      if (added) messages.unshift(added === 1 ? 'referenceAdded' : 'referencesAdded');
+      notify(messages, { count: added, maximum: Model.MAX_REFERENCES });
     } finally {
       addingReferences = false;
       renderReferenceControls();
@@ -473,7 +482,7 @@
       if (!reference || gesture) return;
       const amount = event.target.valueAsNumber;
       paintReference({ ...reference, opacity: amount / 100 });
-      byId('reference-opacity-value').textContent = amount + ' %';
+      byId('reference-opacity-value').textContent = I18n.percent(amount / 100);
     });
     byId('reference-opacity').addEventListener('change', event => {
       editReference(selectedReference(), { opacity: event.target.valueAsNumber / 100 });
@@ -490,13 +499,12 @@
       const references = project.references.filter(reference => reference.id !== activeReferenceId);
       commit({ ...project, references });
       byId(references.length ? 'reference-select' : 'add-reference').focus({ preventScroll: true });
-      notify('Apukuva poistettiin.');
+      notify('referenceRemoved');
     });
   }
 
   function renderPieces() {
     const tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
-    const counts = new Map();
     const fragment = document.createDocumentFragment();
     pieceElements.clear();
     for (const piece of project.pieces) {
@@ -504,11 +512,16 @@
       const element = pieceShape(piece, tile, { class: 'piece-face', fill: tile.color, 'data-piece': piece.id });
       pieceElements.set(piece.id, element);
       fragment.append(element);
-      counts.set(tile.id, (counts.get(tile.id) || 0) + 1);
     }
     layers.pieces.replaceChildren(fragment);
+    renderPieceSummary();
+  }
+
+  function renderPieceSummary() {
+    const counts = new Map();
+    for (const { tileId } of project.pieces) counts.set(tileId, (counts.get(tileId) || 0) + 1);
     byId('work-count').textContent = projectSizeText() + ' · ' + pieceCount(project.pieces.length);
-    renderInventory(tileTypes, counts);
+    renderInventory(placementIndex.tileTypes, counts);
   }
 
   function tileSwatch(tile) {
@@ -521,7 +534,7 @@
 
   function renderInventory(tileTypes, counts) {
     const tiles = [...counts.keys()].map(id => tileTypes.get(id));
-    tiles.sort((a, b) => nameOrder.compare(a.name, b.name));
+    tiles.sort((a, b) => I18n.compare(a.name, b.name));
     const rows = document.createDocumentFragment();
     for (const tile of tiles) {
       const row = document.createElement('tr');
@@ -539,7 +552,7 @@
       label.append(tileSwatch(tile), name);
       heading.append(label);
       const count = document.createElement('td');
-      count.textContent = countFormat.format(counts.get(tile.id));
+      count.textContent = I18n.count(counts.get(tile.id));
       row.append(heading, count);
       rows.append(row);
     }
@@ -549,20 +562,20 @@
   }
 
   function pieceCount(number) {
-    return countFormat.format(number) + (number === 1 ? ' pala' : ' palaa');
+    return t(number === 1 ? 'oneTile' : 'manyTiles', { count: number });
   }
 
   function projectSizeText() {
     const { board } = project;
-    if (board.shape === 'circle') return 'Ø ' + format.format(board.width) + ' mm';
-    return format.format(board.width) + ' × ' + format.format(board.height) + ' mm';
+    if (board.shape === 'circle') return 'Ø ' + I18n.number(board.width) + ' mm';
+    return I18n.number(board.width) + ' × ' + I18n.number(board.height) + ' mm';
   }
 
   function renderSettings() {
     const { board, grid, name, seam } = project;
     byId('project-name').value = name;
     document.querySelectorAll('[name="board-shape"]').forEach(input => { input.checked = input.value === board.shape; });
-    byId('board-width-label').textContent = board.shape === 'circle' ? 'Halkaisija' : 'Leveys';
+    renderBoardWidthLabel();
     byId('board-width').value = board.width;
     byId('board-height-field').hidden = board.shape === 'circle';
     byId('board-height').value = board.height;
@@ -576,9 +589,13 @@
     byId('grid-snap').checked = grid.snap;
   }
 
+  function renderBoardWidthLabel() {
+    byId('board-width-label').textContent = t(project.board.shape === 'circle' ? 'diameter' : 'width');
+  }
+
   function tileSizeText(tile) {
-    if (tile.shape === 'circle') return 'Ø ' + format.format(tile.width) + ' mm';
-    return format.format(tile.width) + ' × ' + format.format(tile.height) + ' mm';
+    if (tile.shape === 'circle') return 'Ø ' + I18n.number(tile.width) + ' mm';
+    return I18n.number(tile.width) + ' × ' + I18n.number(tile.height) + ' mm';
   }
 
   function tileSizeKey(tile) {
@@ -625,18 +642,18 @@
     const sizeSelect = byId('library-size');
     const sizeOptions = [...sizes].sort(([, a], [, b]) => a.width - b.width || a.height - b.height);
     sizeSelect.replaceChildren(
-      new Option('Kaikki koot', ''),
+      new Option(t('allSizes'), ''),
       ...sizeOptions.map(([key, tile]) => new Option(tileSizeText(tile), key))
     );
 
     byId('library-color').replaceChildren(
-      new Option('Kaikki värit', ''),
-      ...[...colorLabels].filter(([key]) => colors.has(key)).map(([key, label]) => new Option(label, key))
+      new Option(t('allColors'), ''),
+      ...colorFamilies.filter(key => colors.has(key)).map(key => new Option(t(key), key))
     );
 
     const tagChips = byId('library-tags');
     const tagButtons = document.createDocumentFragment();
-    const sortedTags = [...tags.values()].sort((a, b) => nameOrder.compare(a.label, b.label));
+    const sortedTags = [...tags.values()].sort((a, b) => I18n.compare(a.label, b.label));
     const maxFrequency = Math.max(1, ...sortedTags.map(tag => tag.count));
     for (const { key, label, count } of sortedTags) {
       const button = filterChip(tagButtons, 'tag-chip');
@@ -645,10 +662,9 @@
       button.textContent = label;
       const tally = document.createElement('span');
       tally.className = 'tag-count';
-      tally.textContent = countFormat.format(count);
+      tally.textContent = I18n.count(count);
       button.append(tally);
-      button.setAttribute('aria-label', label + ', ' + countFormat.format(count) +
-        (count === 1 ? ' palatyyppi' : ' palatyyppiä'));
+      button.setAttribute('aria-label', t(count === 1 ? 'tagOneTileType' : 'tagManyTileTypes', { tag: label, count }));
     }
     tagChips.replaceChildren(tagButtons);
     tagChips.hidden = tags.size === 0;
@@ -670,8 +686,8 @@
     const count = libraryFilterCount();
     const badge = byId('library-filter-count');
     badge.hidden = count === 0;
-    badge.textContent = countFormat.format(count);
-    badge.setAttribute('aria-label', countFormat.format(count) + (count === 1 ? ' suodatin' : ' suodatinta'));
+    badge.textContent = I18n.count(count);
+    badge.setAttribute('aria-label', t(count === 1 ? 'oneFilter' : 'manyFilters', { count }));
     byId('clear-library-filters').hidden = count === 0;
   }
 
@@ -693,7 +709,7 @@
     });
     if (libraryOrder !== 'added') {
       const direction = libraryOrder === 'name-asc' ? 1 : -1;
-      tiles.sort((a, b) => direction * nameOrder.compare(a.name, b.name));
+      tiles.sort((a, b) => direction * I18n.compare(a.name, b.name));
     }
     return tiles;
   }
@@ -742,15 +758,15 @@
       const edit = document.createElement('button');
       edit.type = 'button';
       edit.className = 'icon-button edit-tile';
-      edit.title = 'Muokkaa palatyyppiä';
-      edit.setAttribute('aria-label', 'Muokkaa palatyyppiä ' + tile.name);
+      edit.title = t('editTileType');
+      edit.setAttribute('aria-label', t('editNamedTile', { name: tile.name }));
       edit.append(icon('edit'));
       edit.addEventListener('click', () => openTileDialog(tile));
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'icon-button remove-tile delete-button';
-      remove.title = 'Poista palakirjastosta';
-      remove.setAttribute('aria-label', 'Poista palakirjastosta ' + tile.name);
+      remove.title = t('removeTileType');
+      remove.setAttribute('aria-label', t('removeNamedTile', { name: tile.name }));
       remove.append(icon('delete'));
       remove.addEventListener('click', () => removeTileFromLibrary(tile));
       item.append(choice, edit, remove);
@@ -761,12 +777,11 @@
     const result = byId('library-result');
     result.hidden = libraryFilterCount() === 0;
     result.textContent = visibleTiles.length ?
-      countFormat.format(visibleTiles.length) + ' / ' + countFormat.format(availableTiles.length) + ' palatyyppiä' :
-      'Suodattimilla ei löytynyt paloja.';
+      t('libraryResult', { visible: visibleTiles.length, total: availableTiles.length }) : t('noFilterMatches');
     const hiddenTile = visibleTiles.some(tile => tile.id === activeTileId) ? null :
       availableTiles.find(tile => tile.id === activeTileId);
     byId('hidden-drawing-tile').hidden = !hiddenTile;
-    if (hiddenTile) byId('hidden-drawing-tile').textContent = 'Piirtopala on ' + hiddenTile.name + '.';
+    if (hiddenTile) byId('hidden-drawing-tile').textContent = t('hiddenDrawingTile', { name: hiddenTile.name });
     if (focusTarget) focusTarget.focus({ preventScroll: true });
   }
 
@@ -812,8 +827,7 @@
     commit({ ...project, tiles });
     const nextControl = byId('tile-list').querySelector('.tile-row.active .tile-choice') || byId('add-tile-text');
     nextControl.focus({ preventScroll: true });
-    notify(inUse ? 'Palatyyppi poistettiin kirjastosta. Asetetut palat ovat edelleen työssä.' :
-      'Palatyyppi poistettiin kirjastosta.');
+    notify(inUse ? 'removedTileInUse' : 'removedTileType');
   }
 
   function currentSelection() {
@@ -835,11 +849,11 @@
     byId('selected-panel').hidden = pieces.length === 0;
     if (!pieces.length) return;
     const single = pieces.length === 1;
-    byId('selected-title').textContent = single ? 'Valittu pala' : 'Valitut palat';
+    byId('selected-title').textContent = t(single ? 'selectedTile' : 'selectedTiles');
     byId('selected-name').textContent = single ? placementIndex.tileTypes.get(pieces[0].tileId).name : pieceCount(pieces.length);
     byId('selected-angle-field').hidden = !single;
     byId('rotate').hidden = !single;
-    byId('delete-piece-label').textContent = single ? 'Poista pala' : 'Poista valitut';
+    byId('delete-piece-label').textContent = t(single ? 'deleteTile' : 'deleteSelectedTiles');
     if (single) byId('selected-angle').value = Math.round(pieces[0].angle * 10) / 10;
   }
 
@@ -853,7 +867,7 @@
     canvas.setAttribute('viewBox', [
       viewCenter.x - width / 2, viewCenter.y - height / 2, width, height
     ].join(' '));
-    byId('zoom-level').textContent = Math.round(zoom * 100) + ' %';
+    byId('zoom-level').textContent = I18n.percent(zoom);
     byId('zoom-in').disabled = zoom >= 12;
     byId('zoom-out').disabled = zoom <= .25;
   }
@@ -893,8 +907,8 @@
       button.disabled = (!activeTileId && tileTools.has(button.dataset.tool)) ||
         (!canMoveReference && button.dataset.tool === 'reference');
     });
-    byId('tool-name').textContent = TOOLS[tool][0];
-    byId('tool-hint').textContent = TOOLS[tool][1];
+    byId('tool-name').textContent = t(tool);
+    byId('tool-hint').textContent = t(tool + 'Hint');
     byId('outline-field').hidden = tool !== 'shape';
   }
 
@@ -905,7 +919,7 @@
     if (Object.keys(board).every(key => board[key] === project.board[key])) return;
     if (project.pieces.some(piece => !Model.fitsBoard(board, placementIndex.geometry(piece)))) {
       renderSettings();
-      notify('Osa paloista jäisi alustan ulkopuolelle. Siirrä tai poista ne ennen muutosta.');
+      notify('boardChangeBlocked');
       return;
     }
     if (board.width !== project.board.width || board.height !== project.board.height) resetView();
@@ -918,7 +932,7 @@
       const number = input.valueAsNumber;
       if (!Model.validNumber(number, Number(input.min), Number(input.max))) {
         input.value = oldValue();
-        notify('Anna arvo väliltä ' + format.format(Number(input.min)) + '–' + format.format(Number(input.max)) + '.');
+        notify('invalidNumber', { min: Number(input.min), max: Number(input.max) });
         return;
       }
       if (number !== oldValue()) action(number);
@@ -935,7 +949,7 @@
       });
     }
     byId('project-name').addEventListener('change', event => {
-      const name = event.target.value.trim() || 'Nimetön mosaiikki';
+      const name = event.target.value.trim() || t('untitledProject');
       if (name !== project.name) commit({ ...project, name });
       else event.target.value = project.name;
     });
@@ -948,7 +962,7 @@
     }
     numericChange('seam-width', () => project.seam, seam => {
       commit({ ...project, seam });
-      if (project.pieces.length) notify('Sauman leveys muuttui seuraavia asetteluja varten.');
+      if (project.pieces.length) notify('seamChanged');
     });
     function changeGrid(key, value) {
       commit({ ...project, grid: { ...project.grid, [key]: value } });
@@ -969,18 +983,18 @@
 
   function updateTileShape() {
     const circle = byId('tile-shape').value === 'circle';
-    byId('tile-width-label').textContent = circle ? 'Halkaisija' : 'Leveys';
+    byId('tile-width-label').textContent = t(circle ? 'diameter' : 'width');
     byId('tile-height-field').hidden = circle;
     byId('tile-height').disabled = circle;
   }
 
   function openTileDialog(tile) {
     if (!tile && project.tiles.length >= Model.MAX_TYPES) {
-      notify('Palakirjastossa voi olla enintään ' + Model.MAX_TYPES + ' palatyyppiä.');
+      notify('tooManyTileTypes', { count: Model.MAX_TYPES });
       return;
     }
     editingTileId = tile ? tile.id : null;
-    byId('tile-dialog-title').textContent = tile ? 'Muokkaa palatyyppiä' : 'Lisää palatyyppi';
+    byId('tile-dialog-title').textContent = t(tile ? 'editTileType' : 'addTileType');
     byId('tile-name').value = tile ? tile.name : '';
     byId('tile-shape').value = tile ? tile.shape : 'rectangle';
     byId('tile-color').value = tile ? tile.color : '#347e73';
@@ -1002,7 +1016,7 @@
     const error = byId('tile-error');
 
     if (!name) {
-      error.textContent = 'Anna palatyypille nimi.';
+      error.textContent = t('tileNameRequired');
       error.hidden = false;
       return;
     }
@@ -1011,7 +1025,7 @@
     try {
       tags = Model.normalizeTileTags(tagsInput.value.split(','));
     } catch (invalid) {
-      error.textContent = invalid.message;
+      error.textContent = t(validationKey(invalid, 'invalidTagText'));
       error.hidden = false;
       tagsInput.focus();
       return;
@@ -1027,7 +1041,7 @@
       for (const piece of changed) {
         const geometry = index.geometry(piece);
         if (!index.accepts(geometry)) {
-          error.textContent = 'Tällä koolla tai muodolla asetetut palat eivät mahdu nykyisille paikoilleen.';
+          error.textContent = t('tileEditBlocked');
           error.hidden = false;
           return;
         }
@@ -1084,7 +1098,7 @@
     if (!action.placed.length) return;
     const pieces = action.placed.map(piece => ({ ...piece, id: nextId('piece') }));
     commit({ ...project, pieces: project.pieces.concat(pieces) });
-    if (pieces.length >= action.limit) notify('Toiminnolla lisättiin ' + pieceCount(pieces.length) + '.');
+    if (pieces.length >= action.limit) notify(pieces.length === 1 ? 'addedOneTile' : 'addedManyTiles', { count: pieces.length });
   }
 
   function previewPieces(pieces, tile, path) {
@@ -1109,7 +1123,7 @@
   function fillAt(point, tile) {
     const action = placementAction(tile);
     if (!action.limit) {
-      notify('Työssä on jo enimmäismäärä paloja.');
+      notify('tooManyTiles');
       return;
     }
     const start = snap(point);
@@ -1133,7 +1147,7 @@
       }
     }
     if (action.placed.length) finishPlacement(action);
-    else notify('Valitse kohta, johon mahtuu kokonainen pala.');
+    else notify('fillStartBlocked');
   }
 
   function applySelection(ids) {
@@ -1193,7 +1207,7 @@
     } else if (tool === 'draw') {
       const action = placementAction(tile);
       if (!action.limit) {
-        notify('Työssä on jo enimmäismäärä paloja.');
+        notify('tooManyTiles');
         return;
       }
       placeCandidate(action, point, true);
@@ -1267,7 +1281,7 @@
     for (const piece of current.pieces) pieceElements.get(piece.id)?.classList.remove('moving-piece');
     if (!released || (!current.offset.x && !current.offset.y)) return;
     if (!current.valid) {
-      notify(current.pieces.length === 1 ? 'Pala ei mahdu tähän kohtaan.' : 'Valitut palat eivät mahdu tähän kohtaan.');
+      notify(current.pieces.length === 1 ? 'tilePlacementBlocked' : 'tilesPlacementBlocked');
       return;
     }
     const pieces = project.pieces.map(piece => selectedIds.has(piece.id) ? translatePiece(piece, current.offset) : piece);
@@ -1355,14 +1369,14 @@
     if (event.type !== 'pointerup' || current.kind === 'pan') return;
     if (current.kind === 'draw') {
       if (current.action.placed.length) finishPlacement(current.action);
-      else notify('Pala ei mahdu tähän kohtaan.');
+      else notify('tilePlacementBlocked');
       return;
     }
     const guide = drawingGuide(current, snap(current.lastPoint));
     const action = placementAction(current.tile);
     for (const point of guide.points) placeCandidate(action, point, true);
     if (action.placed.length) finishPlacement(action);
-    else notify('Valitulle viivalle ei mahtunut paloja.');
+    else notify('linePlacementBlocked');
   }
 
   function updateSelected(candidate) {
@@ -1385,7 +1399,7 @@
     const index = new Model.PlacementIndex(project, selectedIds);
     if (index.accepts(index.geometry(candidate))) updateSelected(candidate);
     else {
-      notify('Pala ei mahdu kääntymään tässä kohdassa.');
+      notify('rotationBlocked');
       renderSelection();
     }
   }
@@ -1417,7 +1431,7 @@
   }
 
   function exportProject() {
-    const name = (byId('project-name').value.trim() || 'Nimetön mosaiikki').slice(0, 80);
+    const name = (byId('project-name').value.trim() || t('untitledProject')).slice(0, 80);
     if (name !== project.name) commit({ ...project, name });
     const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2) + '\n'], { type: 'application/json' }));
     const link = document.createElement('a');
@@ -1427,7 +1441,7 @@
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify('Työ tallennettiin JSON-tiedostoksi.');
+    notify('projectExported');
   }
 
   async function importProject(event) {
@@ -1436,18 +1450,18 @@
     input.value = '';
     if (!file) return;
     if (file.size > MAX_PROJECT_FILE) {
-      notify('Valitse enintään 32 Mt:n kokoinen Mosaic Planner -tiedosto.');
+      notify('projectFileTooLarge');
       return;
     }
     let restored;
     try {
       restored = Model.readProject(JSON.parse(await file.text()));
     } catch (error) {
-      notify(error instanceof SyntaxError ? 'Tiedostoa ei voitu lukea JSON-muodossa.' : error.message);
+      notify(error instanceof SyntaxError ? 'invalidJson' : validationKey(error, 'invalidProject'));
       return;
     }
     if (gesture) {
-      notify('Lopeta käynnissä oleva piirto ja avaa tiedosto uudelleen.');
+      notify('projectDragActive');
       return;
     }
     projectGeneration++;
@@ -1456,7 +1470,7 @@
     resetView();
     commit(restored);
     setTool('draw');
-    notify('Työ avattu.');
+    notify('projectOpened');
   }
 
   function newProject() {
@@ -1465,7 +1479,7 @@
     selectedIds.clear();
     clearLibraryFilters();
     resetView();
-    commit(Model.blankProject(project.tiles.filter(tile => !tile.archived)));
+    commit(Model.blankProject(project.tiles.filter(tile => !tile.archived), t('untitledProject')));
     setTool('draw');
     byId('project-name').focus();
     byId('project-name').select();
@@ -1538,6 +1552,21 @@
     if (selected) rotateSelected(selected.angle + 15);
   }
 
+  byId('language-select').addEventListener('change', event => {
+    I18n.choose(event.target.value);
+    renderBoardWidthLabel();
+    renderTools();
+    renderReferenceControls();
+    renderPieceSummary();
+    librarySource = undefined;
+    renderLibrary();
+    renderLibraryWidth();
+    renderSelection();
+    renderView();
+    if (saveStatus) setSaveStatus(saveStatus);
+    if (!byId('feedback').hidden) renderFeedback();
+  });
+
   bindSettings();
   bindLibraryFilters();
   bindReferences();
@@ -1600,7 +1629,7 @@
       useProject(saved ? Model.readProject(saved) : project);
     } catch {
       useProject(project, false);
-      byId('save-status').textContent = 'Selaimeen tallennettua työtä ei voitu avata.';
+      setSaveStatus('loadFailed');
     } finally {
       setTool('draw');
       document.body.removeAttribute('inert');

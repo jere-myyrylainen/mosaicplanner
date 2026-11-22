@@ -1,39 +1,41 @@
 # Mosaic Planner
 
-Paikallinen selainohjelma mosaiikkikuvioiden suunnitteluun. Avaa `index.html` nykyaikaisessa selaimessa. Ohjelma toimii ilman asennusta, palvelinta tai verkkoyhteyttä.
+Mosaic Planner is an offline browser app for designing mosaics. Open `index.html` in a modern browser. The app requires no installation, server, or internet connection.
 
-Voit myös tarjoilla projektikansion paikallisesti. Käynnistä kansiossa `python3 -m http.server 8765 --bind 127.0.0.1` ja avaa selaimessa `http://127.0.0.1:8765`.
+To serve the project folder locally, run `python3 -m http.server 8765 --bind 127.0.0.1` in the folder and open `http://127.0.0.1:8765` in your browser.
 
-## Ensimmäinen työ
+Use the language menu in the header to switch between **Suomi** (Finnish) and **English**. The browser remembers your choice when local storage is available.
 
-- Esimerkkityö Kompassiruusu avautuu ensimmäisellä käynnistyksellä. **Uusi** aloittaa tyhjän työn ja ottaa nykyisen palakirjaston mukaan.
-- Valitse alustaksi suorakulmio, ympyrä tai pyöristetty suorakulmio. Alustan, apuristikon ja palojen mitat syötetään millimetreinä.
-- Lisää **Apukuvat**-kohdasta JPG- tai PNG-kuvia ristikon ja mosaiikkipalojen alle. Säädä valitun kuvan leveyttä ja peittävyyttä tai valitse **Siirrä kuvaa** ja vedä työalueella. Apukuvat tallentuvat työn JSON-tiedostoon.
-- Lisää palakirjastoon suorakulmion, ympyrän tai kolmion muotoisia paloja. Valitse palatyyppi ja aseta se napsauttamalla tai piirrä vetämällä. Viiva ja muoto asettavat paloja ääriviivalle. Täyttö asettaa paloja yhtenäiselle tyhjälle alueelle valitun palan mittojen mukaisessa ruudukossa.
-- Säädä palakirjaston leveyttä vetämällä sen vasenta reunaa tai valitsemalla säädin sarkaimella ja käyttämällä nuolinäppäimiä. Leveys tallentuu selaimeen. Kaksoisnapsautus palauttaa oletusleveyden.
-- Avaa palakirjastosta **Järjestä ja suodata**, kun haluat järjestää palat nimen mukaan tai suodattaa ne mittojen ja värin perusteella. Nimijärjestyksen valinta säilyy selaimessa.
-- Värisuodatin käyttää väriryhmiä, kuten ruskeita ja keltaisia. Sama sävy voi kuulua useaan ryhmään.
-- Lisää palatyypille pilkuilla erotetut tunnisteet, kuten `lasi, ulkokäyttö`. Tunnistepilvi näyttää, monellako palatyypillä tunniste on. Usean tunnisteen valinta näyttää palat, joilla on ne kaikki. Tunnisteet tallentuvat työn mukana.
-- Sauman leveys määrää uusien palojen vähimmäisvälin. Jo asetetut palat säilyttävät sijaintinsa, kun sauman leveyttä muutetaan. Apuristikko on säädettävissä erikseen. Jos ristikkoon tarttuminen on käytössä, täyttö kohdistaa aloituspalan ristikkoon ja käyttää sitten palan mittoja ja saumaa seuraavien palojen asettamiseen.
-- Poista palatyyppi palakirjaston roskakoripainikkeella. Työssä käytetyt palat säilyvät piirtoalueella ja tallennetussa tiedostossa.
-- Valitse yksittäinen pala napsauttamalla. Rajaa useita paloja vetämällä tyhjästä kohdasta, tai lisää tai poista yksittäinen pala valinnasta Shift-napsautuksella. Vedä valittua palaa siirtääksesi koko valintaa. **Poista valitut** poistaa valinnan palat kerralla. Yksittäistä valittua palaa voi myös kiertää.
-- Hiiren rulla suurentaa ja pienentää näkymää. Käsi-työkalulla tai välilyönti pohjassa vetäminen siirtää näkymää.
-- Pyyhekumilla voit poistaa yhden palan napsauttamalla tai useita paloja vetämällä. Kumoa-painike palauttaa yhden vedon aikana poistetut palat kerralla.
-- Avaa alalaidan **Palamäärät**, kun haluat tarkistaa työhön asetettujen palojen määrän palatyypeittäin. Myös kirjastosta poistetun palatyypin asetetut palat näkyvät määrissä.
+## Your first project
 
-Selain tallentaa viimeisimmän työn paikalliseen muistiin, jos selaimen asetukset sallivat sen. **Tallenna** lataa työn ja sen palakirjaston JSON-tiedostoksi. **Avaa** tuo sen takaisin editoriin, myös toisella laitteella.
+- The Compass Rose example opens on your first visit. Select **New** to start with an empty board and keep your current tile library.
+- Choose a rectangular, circular, or rounded rectangular board. Enter board, guide grid, and tile dimensions in millimetres.
+- Under **Reference images**, add JPG or PNG images beneath the grid and tiles. Adjust the selected image's width and opacity, or select **Move image** and drag on the canvas. Reference images are included in the project JSON file.
+- Add rectangular, circular, or triangular tile types to the library. Choose a tile type and click to place a tile or drag to draw. The Line and Shape tools place tiles along an outline. The Fill tool places tiles in a connected empty area, using a grid sized to the selected tile.
+- Resize the tile library by dragging its left edge or by tabbing to the resize handle and using the arrow keys. The browser remembers the width. Double-click the handle to restore the default.
+- Open **Sort and filter** in the tile library to sort tiles by name or filter by size and colour. The browser remembers the sort order.
+- The colour filter uses families such as browns and yellows. A shade can belong to more than one family.
+- Add comma-separated tags to a tile type, such as `glass, outdoor`. The tag cloud shows how many tile types have each tag. Selecting multiple tags shows tile types that have all of them. Tags are saved with the project.
+- The grout gap sets the minimum spacing for newly placed tiles. Existing tiles stay in place when you change the gap. You can adjust the guide grid independently. With snapping enabled, Fill snaps its first tile to the guide grid, then uses the tile dimensions and grout gap to place the remaining tiles.
+- Use the trash button in the library to remove a tile type. Tiles already placed with that type stay on the board and in the saved file.
+- Click a tile to select it. Drag from an empty spot to select multiple tiles, or Shift-click individual tiles to add them to or remove them from the selection. Drag a selected tile to move the entire selection. Choose **Delete selected** to remove those tiles together. You can also rotate a single selected tile.
+- Scroll the mouse wheel to zoom. Use the Pan tool or hold Space while dragging to move the view.
+- With the Eraser, click to remove a single tile or drag to remove several. Undo restores all tiles removed in one drag.
+- Open **Tile counts** at the bottom of the canvas to see the number of placed tiles of each type. The counts include placed tiles whose types have been removed from the library.
 
-## Pikanäppäimet
+The browser stores your most recent project locally when its settings allow it. **Save** downloads the project and its tile library as a JSON file. Use **Open** to load that file into the editor on any device.
 
-| Näppäin | Toiminto |
+## Keyboard shortcuts
+
+| Key | Action |
 | --- | --- |
-| V, B, L, M, G, H | Valinta, vapaa piirto, viiva, muoto, täyttö, näkymän siirto |
-| E | Pyyhekumi |
-| Esc | Palaa valintatyökaluun |
-| Välilyönti + veto | Siirrä näkymää |
-| R | Kierrä valittua palaa 15° |
-| Shift + napsautus tai veto | Muokkaa nykyistä valintaa |
-| Delete / Backspace | Poista valitut palat |
-| Ctrl / ⌘ + Z | Kumoa |
-| Ctrl / ⌘ + Shift + Z | Tee uudelleen |
-| Ctrl / ⌘ + S | Tallenna tiedostoksi |
+| V, B, L, M, G, H | Select, Freehand, Line, Shape, Fill, Pan |
+| E | Eraser |
+| Esc | Return to the Select tool |
+| Space + drag | Pan the view |
+| R | Rotate the selected tile by 15° |
+| Shift + click or drag | Modify the current selection |
+| Delete / Backspace | Delete selected tiles |
+| Ctrl / ⌘ + Z | Undo |
+| Ctrl / ⌘ + Shift + Z | Redo |
+| Ctrl / ⌘ + S | Save to a file |

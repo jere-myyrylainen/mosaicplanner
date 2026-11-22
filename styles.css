@@ -29,7 +29,7 @@ button:disabled { cursor: default; opacity: .38; }
   stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
 }
 .app-header {
-  min-height: 68px; display: grid; grid-template-columns: 1fr minmax(140px, 25%) 1fr;
+  min-height: 68px; display: grid; grid-template-columns: 1fr minmax(140px, 25%) 1fr auto;
   align-items: center; gap: 1rem; padding: .65rem 1.3rem;
   background: var(--paper); border-bottom: 1px solid var(--line);
 }
@@ -145,6 +145,7 @@ select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m2 2 4 4 4-4' fill='none' stroke='%2352635b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right .55rem center;
 }
+.language-select { width: auto; justify-self: end; font-size: .875rem; font-weight: 650; }
 .outline-mode { font-size: .875rem; }
 .stage {
   min-width: 0; position: relative; overflow: hidden; isolation: isolate;
@@ -334,8 +335,9 @@ dialog form > p { margin: 0; color: var(--muted); }
   .tool-name { display: none; }
 }
 @media (max-width: 760px) {
-  .app-header { grid-template-columns: 1fr 1fr; padding-inline: .75rem; gap: .35rem .55rem; }
-  .project-name { grid-row: 2; grid-column: 1 / -1; }
+  .app-header { grid-template-columns: minmax(0, 1fr) auto; padding-inline: .75rem; gap: .35rem .55rem; }
+  .project-name { grid-row: 2; grid-column: 1; max-width: none; }
+  .language-select { grid-row: 2; grid-column: 2; }
   .editor {
     --default-library-width: 50%;
     grid-template-columns: minmax(0, 1fr) var(--library-width, var(--default-library-width)); min-height: 0;
