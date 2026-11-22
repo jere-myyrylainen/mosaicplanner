@@ -141,13 +141,16 @@ select {
 #canvas { position: absolute; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; }
 #canvas [data-piece] { pointer-events: visiblePainted; }
 .stage[data-tool="draw"] #canvas, .stage[data-tool="line"] #canvas,
-.stage[data-tool="shape"] #canvas, .stage[data-tool="fill"] #canvas { cursor: crosshair; }
+.stage[data-tool="shape"] #canvas, .stage[data-tool="fill"] #canvas,
+.stage[data-tool="erase"] #canvas { cursor: crosshair; }
 .stage[data-tool="select"] #canvas [data-piece] { cursor: move; }
+.stage[data-tool="erase"]:not(.pan-ready):not(.is-panning) .piece-face:hover { stroke: #a34032; stroke-width: 2; }
 .stage[data-tool="pan"] #canvas, .stage.pan-ready #canvas { cursor: grab; }
 .stage.is-panning #canvas { cursor: grabbing; }
 .board-shadow { filter: drop-shadow(0 6px 12px #223c3021); }
 .board-outline { stroke: #96a69a; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .piece-face { stroke: #22342e27; stroke-width: .7; vector-effect: non-scaling-stroke; }
+.erased-piece { display: none; }
 .selection-outline { fill: none; stroke: #193e9a; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .preview-piece { opacity: .55; }
 .guide { fill: none; stroke: var(--accent); stroke-dasharray: 4 4; stroke-width: 1.2; vector-effect: non-scaling-stroke; }

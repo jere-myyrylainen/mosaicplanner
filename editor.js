@@ -10,6 +10,7 @@
     line: ['Viiva', 'Vedä viivan alusta loppuun.'],
     shape: ['Muoto', 'Vedä muodon vastakkaisten kulmien välillä.'],
     fill: ['Täyttö', 'Napsauta tyhjää aluetta, jonka haluat täyttää.'],
+    erase: ['Pyyhekumi', 'Poista pala napsauttamalla tai poista useita paloja vetämällä.'],
     pan: ['Siirrä näkymää', 'Siirrä näkymää vetämällä.']
   };
 
@@ -28,6 +29,7 @@
   const countFormat = new Intl.NumberFormat('fi-FI');
   const past = [];
   const future = [];
+  const pieceElements = new Map();
 
   let project = restoreProject();
   let activeTileId = project.tiles[0].id;
@@ -153,9 +155,12 @@
   function renderPieces() {
     const tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
     const fragment = document.createDocumentFragment();
+    pieceElements.clear();
     for (const piece of project.pieces) {
       const tile = tileTypes.get(piece.tileId);
-      fragment.append(pieceShape(piece, tile, { class: 'piece-face', fill: tile.color, 'data-piece': piece.id }));
+      const element = pieceShape(piece, tile, { class: 'piece-face', fill: tile.color, 'data-piece': piece.id });
+      pieceElements.set(piece.id, element);
+      fragment.append(element);
     }
     layers.pieces.replaceChildren(fragment);
     byId('work-count').textContent = projectSizeText() + ' · ' + pieceCount(project.pieces.length);
@@ -207,7 +212,7 @@
       choice.setAttribute('aria-pressed', active);
       choice.addEventListener('click', () => {
         activeTileId = tile.id;
-        if (tool === 'select' || tool === 'pan') setTool('draw');
+        if (tool === 'select' || tool === 'pan' || tool === 'erase') setTool('draw');
         renderLibrary();
       });
       if (tile.id === focusedTileId) focusTarget = choice;
@@ -550,6 +555,10 @@
       gesture = {
         kind: 'move', origin: point, selected, element, index: new Model.PlacementIndex(project, selected.id)
       };
+    } else if (tool === 'erase') {
+      gesture = { kind: 'erase', previous: point, erased: new Set() };
+      const element = event.target.closest('[data-piece]');
+      if (element) erasePiece(gesture, element.dataset.piece);
     } else if (tool === 'fill') {
       fillAt(point, tile);
       return;
@@ -568,6 +577,12 @@
     gesture.pointerId = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
+  }
+
+  function erasePiece(current, id) {
+    if (current.erased.has(id)) return;
+    current.erased.add(id);
+    pieceElements.get(id)?.classList.add('erased-piece');
   }
 
   function drawingGuide(current, end) {
@@ -600,6 +615,10 @@
       current.valid = current.index.accepts(current.index.geometry(candidate));
       current.element.style.opacity = '.3';
       renderSelection(candidate, current.valid);
+    } else if (current.kind === 'erase') {
+      if (point.x === current.previous.x && point.y === current.previous.y) return;
+      for (const piece of placementIndex.piecesAlong(current.previous, point)) erasePiece(current, piece.id);
+      current.previous = point;
     } else if (current.kind === 'draw') {
       const { action, previous } = current;
       if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1e-7) return;
@@ -638,6 +657,15 @@
       } else {
         if (event.type === 'pointerup' && current.candidate) notify('Pala ei mahdu tähän kohtaan.');
         renderSelection();
+      }
+      return;
+    }
+    if (current.kind === 'erase') {
+      if (event.type === 'pointerup' && current.erased.size) {
+        const pieces = project.pieces.filter(piece => !current.erased.has(piece.id));
+        commit({ ...project, pieces });
+      } else {
+        for (const id of current.erased) pieceElements.get(id)?.classList.remove('erased-piece');
       }
       return;
     }
@@ -781,7 +809,7 @@
       layers.preview.replaceChildren();
       return;
     }
-    const shortcuts = { v: 'select', b: 'draw', l: 'line', m: 'shape', g: 'fill', h: 'pan' };
+    const shortcuts = { v: 'select', b: 'draw', l: 'line', m: 'shape', g: 'fill', e: 'erase', h: 'pan' };
     if (shortcuts[key]) setTool(shortcuts[key]);
     if (key === 'delete' || key === 'backspace') {
       event.preventDefault();

@@ -81,16 +81,42 @@
   function minSegmentDistanceSquared(point, start, end) {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
+    if (dx === 0 && dy === 0) return (point.x - start.x) ** 2 + (point.y - start.y) ** 2;
     const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
     const t = Math.max(0, Math.min(1, projection));
     return (point.x - start.x - t * dx) ** 2 + (point.y - start.y - t * dy) ** 2;
   }
 
+  function sideOfEdge(start, end, point) {
+    return (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x);
+  }
+
   function pointInPolygon(point, points) {
-    return points.every((start, i) => {
-      const end = points[(i + 1) % points.length];
-      return (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x) >= 0;
-    });
+    return points.every((start, i) => sideOfEdge(start, points[(i + 1) % points.length], point) >= 0);
+  }
+
+  function segmentHits(geometry, start, end, bounds) {
+    if (bounds.maxX < geometry.minX || bounds.minX > geometry.maxX ||
+        bounds.maxY < geometry.minY || bounds.minY > geometry.maxY) return false;
+    if (geometry.radius) {
+      return minSegmentDistanceSquared(geometry.piece, start, end) <= geometry.radius ** 2;
+    }
+
+    // Clip the segment to the inside of each edge of the convex tile.
+    let entry = 0;
+    let exit = 1;
+    const points = geometry.points;
+    for (let i = 0; i < points.length; i++) {
+      const edgeStart = points[i];
+      const edgeEnd = points[(i + 1) % points.length];
+      const from = sideOfEdge(edgeStart, edgeEnd, start);
+      const to = sideOfEdge(edgeStart, edgeEnd, end);
+      if (from < 0 && to < 0) return false;
+      if (from < 0) entry = Math.max(entry, from / (from - to));
+      if (to < 0) exit = Math.min(exit, from / (from - to));
+      if (entry > exit) return false;
+    }
+    return true;
   }
 
   function overlapOnAxes(points, other) {
@@ -178,21 +204,33 @@
       }
     }
 
-    accepts(geometry) {
-      if (!fitsBoard(this.board, geometry)) return false;
-      const keys = cellsInBounds(geometry, this.gap);
-      const collides = other => tooClose(geometry, other, this.gap);
-      if (!keys) return !this.geometries.some(collides);
-      if (this.largeGeometries.some(collides)) return false;
-      const neighbors = new Set();
+    nearby(bounds, margin = 0) {
+      const keys = cellsInBounds(bounds, margin);
+      if (!keys) return this.geometries;
+      const neighbors = new Set(this.largeGeometries);
       for (const key of keys) {
         const cell = this.cells.get(key);
         if (cell) for (const other of cell) neighbors.add(other);
       }
-      for (const other of neighbors) {
-        if (collides(other)) return false;
+      return neighbors;
+    }
+
+    accepts(geometry) {
+      if (!fitsBoard(this.board, geometry)) return false;
+      for (const other of this.nearby(geometry, this.gap)) {
+        if (tooClose(geometry, other, this.gap)) return false;
       }
       return true;
+    }
+
+    *piecesAlong(start, end) {
+      const bounds = {
+        minX: Math.min(start.x, end.x), maxX: Math.max(start.x, end.x),
+        minY: Math.min(start.y, end.y), maxY: Math.max(start.y, end.y)
+      };
+      for (const geometry of this.nearby(bounds)) {
+        if (segmentHits(geometry, start, end, bounds)) yield geometry.piece;
+      }
     }
   }
 

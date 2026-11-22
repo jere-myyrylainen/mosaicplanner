@@ -11,6 +11,7 @@ Voit myös tarjoilla projektikansion paikallisesti. Käynnistä kansiossa `pytho
 - Lisää palakirjastoon suorakulmion, ympyrän tai kolmion muotoisia paloja. Valitse palatyyppi ja aseta se napsauttamalla tai piirrä vetämällä. Viiva ja muoto asettavat paloja ääriviivalle. Täyttö asettaa paloja yhtenäiselle tyhjälle alueelle valitun palan mittojen mukaisessa ruudukossa.
 - Sauman leveys määrää uusien palojen vähimmäisvälin. Jo asetetut palat säilyttävät sijaintinsa, kun sauman leveyttä muutetaan. Apuristikko on säädettävissä erikseen. Jos ristikkoon tarttuminen on käytössä, täyttö kohdistaa aloituspalan ristikkoon ja käyttää sitten palan mittoja ja saumaa seuraavien palojen asettamiseen.
 - Valintatyökalulla voit siirtää, kiertää ja poistaa yksittäisiä paloja. Hiiren rulla suurentaa ja pienentää näkymää. Käsi-työkalulla tai välilyönti pohjassa vetäminen siirtää näkymää.
+- Pyyhekumilla voit poistaa yhden palan napsauttamalla tai useita paloja vetämällä. Kumoa-painike palauttaa yhden vedon aikana poistetut palat kerralla.
 
 Selain tallentaa viimeisimmän työn paikalliseen muistiin, jos selaimen asetukset sallivat sen. **Tallenna** lataa työn ja sen palakirjaston JSON-tiedostoksi. **Avaa** tuo sen takaisin editoriin, myös toisella laitteella.
 
@@ -19,6 +20,7 @@ Selain tallentaa viimeisimmän työn paikalliseen muistiin, jos selaimen asetuks
 | Näppäin | Toiminto |
 | --- | --- |
 | V, B, L, M, G, H | Valinta, vapaa piirto, viiva, muoto, täyttö, näkymän siirto |
+| E | Pyyhekumi |
 | Välilyönti + veto | Siirrä näkymää |
 | R | Kierrä valittua palaa 15° |
 | Delete / Backspace | Poista valittu pala |
