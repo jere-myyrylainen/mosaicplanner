@@ -352,6 +352,27 @@
     return typeof value === 'string' && Boolean(value.trim()) && value.length <= maxLength;
   }
 
+  function tileTagKey(tag) {
+    return tag.toLocaleLowerCase('fi').normalize('NFC');
+  }
+
+  function normalizeTileTags(values) {
+    if (!Array.isArray(values)) throw new Error('Tunnisteiden pitää olla tekstiä.');
+    const tags = new Map();
+    for (const value of values) {
+      if (typeof value !== 'string') throw new Error('Tunnisteiden pitää olla tekstiä.');
+      const tag = value.trim().replace(/\s+/gu, ' ').normalize('NFC');
+      if (!tag) continue;
+      if (tag.includes(',') || tag.length > 32) {
+        throw new Error('Kussakin tunnisteessa voi olla enintään 32 merkkiä. Erota tunnisteet pilkulla.');
+      }
+      const key = tileTagKey(tag);
+      if (!tags.has(key)) tags.set(key, tag);
+      if (tags.size > 12) throw new Error('Palatyypillä voi olla enintään 12 tunnistetta.');
+    }
+    return [...tags.values()];
+  }
+
   function readProject(value) {
     const error = 'Tiedosto ei ole kelvollinen Mosaic Planner -työ.';
     if (!value || value.version !== 1 || !validText(value.name, 80)) throw new Error(error);
@@ -369,13 +390,20 @@
     const tileTypes = new Map();
     for (const tile of tiles) {
       if (!tile || !validText(tile.id, 100) || tileTypes.has(tile.id) || !validText(tile.name, 60) ||
-          !tileShapes.includes(tile.shape) || !/^#[0-9a-f]{6}$/i.test(tile.color) ||
+          !tileShapes.includes(tile.shape) || typeof tile.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(tile.color) ||
           !validNumber(tile.width, .5, 10000) || !validNumber(tile.height, .5, 10000) ||
           (tile.archived !== undefined && typeof tile.archived !== 'boolean') ||
           (tile.shape === 'circle' && tile.width !== tile.height)) throw new Error(error);
+      let tags;
+      try {
+        tags = tile.tags === undefined ? [] : normalizeTileTags(tile.tags);
+      } catch {
+        throw new Error(error);
+      }
       tileTypes.set(tile.id, {
         id: tile.id, name: tile.name.trim(), shape: tile.shape, color: tile.color,
-        width: tile.width, height: tile.height, ...(tile.archived ? { archived: true } : {})
+        width: tile.width, height: tile.height, ...(tile.archived ? { archived: true } : {}),
+        ...(tags.length ? { tags } : {})
       });
     }
 
@@ -402,8 +430,8 @@
 
   const model = {
     MAX_PIECES, MAX_TYPES, MAX_STROKE, PlacementIndex, angleInDegrees, blankProject, demoProject,
-    fitsBoard, lineSpacing, outlinePath, pieceGeometry, pointInBoard, readProject, sampleOutline,
-    sampleSegment, validNumber
+    fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard,
+    readProject, sampleOutline, sampleSegment, tileTagKey, validNumber
   };
 
   if (typeof module === 'object') module.exports = model;

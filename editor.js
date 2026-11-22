@@ -3,6 +3,7 @@
 
   const Model = window.MosaicGeometry;
   const STORAGE_KEY = 'mosaic-planner.project.v1';
+  const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const SVG = 'http://www.w3.org/2000/svg';
   const TOOLS = {
     select: ['Valitse', 'Rajaa palat vetämällä tyhjästä kohdasta tai valitse ne Shift-napsautuksilla. Siirrä valintaa vetämällä palasta.'],
@@ -28,11 +29,16 @@
   const tileDialog = byId('tile-dialog');
   const format = new Intl.NumberFormat('fi-FI', { maximumFractionDigits: 2 });
   const countFormat = new Intl.NumberFormat('fi-FI');
+  const nameOrder = new Intl.Collator('fi-FI', { sensitivity: 'base', numeric: true });
   const past = [];
   const future = [];
   const pieceElements = new Map();
+  const libraryFilters = { size: '', color: '', tags: new Set() };
 
   let project = restoreProject();
+  let libraryOrder = restoreLibraryOrder();
+  let librarySource;
+  let availableTiles = [];
   let activeTileId;
   let selectedIds = new Set();
   let editingTileId = null;
@@ -55,6 +61,16 @@
     return Model.demoProject();
   }
 
+  function restoreLibraryOrder() {
+    try {
+      const order = localStorage.getItem(LIBRARY_ORDER_KEY);
+      if (order === 'name-asc' || order === 'name-desc') return order;
+    } catch {
+      // The chosen order can still be used until the editor is closed.
+    }
+    return 'added';
+  }
+
   function persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
@@ -75,7 +91,8 @@
   function useProject(next) {
     if (next.tiles.some(tile => tile.archived)) {
       const inUse = new Set(next.pieces.map(piece => piece.tileId));
-      next = { ...next, tiles: next.tiles.filter(tile => !tile.archived || inUse.has(tile.id)) };
+      const tiles = next.tiles.filter(tile => !tile.archived || inUse.has(tile.id));
+      if (tiles.length !== next.tiles.length) next = { ...next, tiles };
     }
     project = next;
     if (!project.tiles.some(tile => tile.id === activeTileId && !tile.archived)) {
@@ -204,13 +221,146 @@
     byId('grid-snap').checked = grid.snap;
   }
 
+  function tileSizeText(tile) {
+    if (tile.shape === 'circle') return 'Ø ' + format.format(tile.width) + ' mm';
+    return format.format(tile.width) + ' × ' + format.format(tile.height) + ' mm';
+  }
+
+  function tileSizeKey(tile) {
+    const dimensions = tile.shape === 'circle' ? 'diameter' : 'sides';
+    return dimensions + '/' + tile.width + '/' + tile.height;
+  }
+
+  function filterChip(container, className) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'filter-chip ' + className;
+    container.append(button);
+    return button;
+  }
+
+  function refreshLibraryOptions() {
+    if (librarySource === project.tiles) return;
+    librarySource = project.tiles;
+    availableTiles = project.tiles.filter(tile => !tile.archived);
+    byId('library-tools').hidden = availableTiles.length === 0;
+
+    const sizes = new Map();
+    const colors = new Set();
+    const tags = new Map();
+    for (const tile of availableTiles) {
+      sizes.set(tileSizeKey(tile), tile);
+      colors.add(tile.color.toLowerCase());
+      for (const label of tile.tags || []) {
+        const key = Model.tileTagKey(label);
+        if (!tags.has(key)) tags.set(key, { key, label, count: 0 });
+        tags.get(key).count++;
+      }
+    }
+
+    if (!sizes.has(libraryFilters.size)) libraryFilters.size = '';
+    if (!colors.has(libraryFilters.color)) libraryFilters.color = '';
+    for (const key of libraryFilters.tags) {
+      if (!tags.has(key)) libraryFilters.tags.delete(key);
+    }
+
+    const sizeSelect = byId('library-size');
+    const sizeOptions = [...sizes].sort(([, a], [, b]) => a.width - b.width || a.height - b.height);
+    sizeSelect.replaceChildren(
+      new Option('Kaikki koot', ''),
+      ...sizeOptions.map(([key, tile]) => new Option(tileSizeText(tile), key))
+    );
+
+    const colorChips = byId('library-colors');
+    const colorButtons = document.createDocumentFragment();
+    const allColors = filterChip(colorButtons, '');
+    allColors.dataset.colorFilter = '';
+    allColors.textContent = 'Kaikki';
+    for (const color of [...colors].sort()) {
+      const button = filterChip(colorButtons, 'color-chip');
+      button.dataset.colorFilter = color;
+      button.title = color.toUpperCase();
+      button.setAttribute('aria-label', 'Väri ' + color.toUpperCase());
+      const swatch = document.createElement('span');
+      swatch.style.setProperty('--tile-color', color);
+      button.append(swatch);
+    }
+    colorChips.replaceChildren(colorButtons);
+
+    const tagChips = byId('library-tags');
+    const tagButtons = document.createDocumentFragment();
+    const sortedTags = [...tags.values()].sort((a, b) => nameOrder.compare(a.label, b.label));
+    const maxFrequency = Math.max(1, ...sortedTags.map(tag => tag.count));
+    for (const { key, label, count } of sortedTags) {
+      const button = filterChip(tagButtons, 'tag-chip');
+      button.dataset.tagFilter = key;
+      button.style.setProperty('--tag-size', (.8 + .18 * (count - 1) / Math.max(1, maxFrequency - 1)) + 'rem');
+      button.textContent = label;
+      const tally = document.createElement('span');
+      tally.className = 'tag-count';
+      tally.textContent = countFormat.format(count);
+      button.append(tally);
+      button.setAttribute('aria-label', label + ', ' + countFormat.format(count) +
+        (count === 1 ? ' palatyyppi' : ' palatyyppiä'));
+    }
+    tagChips.replaceChildren(tagButtons);
+    tagChips.hidden = tags.size === 0;
+    byId('library-no-tags').hidden = tags.size > 0;
+    syncLibraryFilters();
+  }
+
+  function libraryFilterCount() {
+    return Number(Boolean(libraryFilters.size)) + Number(Boolean(libraryFilters.color)) + libraryFilters.tags.size;
+  }
+
+  function syncLibraryFilters() {
+    byId('library-sort').value = libraryOrder;
+    byId('library-size').value = libraryFilters.size;
+    byId('library-colors').querySelectorAll('button').forEach(button => {
+      button.setAttribute('aria-pressed', button.dataset.colorFilter === libraryFilters.color);
+    });
+    byId('library-tags').querySelectorAll('button').forEach(button => {
+      button.setAttribute('aria-pressed', libraryFilters.tags.has(button.dataset.tagFilter));
+    });
+    const count = libraryFilterCount();
+    const badge = byId('library-filter-count');
+    badge.hidden = count === 0;
+    badge.textContent = countFormat.format(count);
+    badge.setAttribute('aria-label', countFormat.format(count) + (count === 1 ? ' suodatin' : ' suodatinta'));
+    byId('clear-library-filters').hidden = count === 0;
+  }
+
+  function clearLibraryFilters() {
+    libraryFilters.size = '';
+    libraryFilters.color = '';
+    libraryFilters.tags.clear();
+    syncLibraryFilters();
+  }
+
+  function filteredLibraryTiles() {
+    const { size, color, tags } = libraryFilters;
+    const tiles = availableTiles.filter(tile => {
+      if (size && tileSizeKey(tile) !== size) return false;
+      if (color && tile.color.toLowerCase() !== color) return false;
+      if (!tags.size) return true;
+      const keys = new Set((tile.tags || []).map(Model.tileTagKey));
+      return [...tags].every(tag => keys.has(tag));
+    });
+    if (libraryOrder !== 'added') {
+      const direction = libraryOrder === 'name-asc' ? 1 : -1;
+      tiles.sort((a, b) => direction * nameOrder.compare(a.name, b.name));
+    }
+    return tiles;
+  }
+
   function renderLibrary() {
+    refreshLibraryOptions();
+    const visibleTiles = filteredLibraryTiles();
     const list = byId('tile-list');
     const fragment = document.createDocumentFragment();
     const focusedTileId = list.contains(document.activeElement) ? document.activeElement.dataset.tileChoice : null;
     let focusTarget;
-    for (const tile of project.tiles) {
-      if (tile.archived) continue;
+    for (const tile of visibleTiles) {
       const item = document.createElement('li');
       item.className = 'tile-row';
       const active = tile.id === activeTileId;
@@ -238,9 +388,15 @@
       const name = document.createElement('strong');
       name.textContent = tile.name;
       const size = document.createElement('small');
-      size.textContent = tile.shape === 'circle' ? 'Ø ' + format.format(tile.width) + ' mm' :
-        format.format(tile.width) + ' × ' + format.format(tile.height) + ' mm';
+      size.textContent = tileSizeText(tile);
       caption.append(name, size);
+      if (tile.tags?.length) {
+        const tags = document.createElement('small');
+        tags.className = 'tile-tags';
+        tags.textContent = tile.tags.join(', ');
+        tags.title = tags.textContent;
+        caption.append(tags);
+      }
       choice.append(swatch, caption);
 
       const edit = document.createElement('button');
@@ -261,8 +417,55 @@
       fragment.append(item);
     }
     list.replaceChildren(fragment);
-    byId('empty-library').hidden = list.childElementCount > 0;
+    byId('empty-library').hidden = availableTiles.length > 0;
+    const result = byId('library-result');
+    result.hidden = libraryFilterCount() === 0;
+    result.textContent = visibleTiles.length ?
+      countFormat.format(visibleTiles.length) + ' / ' + countFormat.format(availableTiles.length) + ' palatyyppiä' :
+      'Suodattimilla ei löytynyt paloja.';
+    const hiddenTile = visibleTiles.some(tile => tile.id === activeTileId) ? null :
+      availableTiles.find(tile => tile.id === activeTileId);
+    byId('hidden-drawing-tile').hidden = !hiddenTile;
+    if (hiddenTile) byId('hidden-drawing-tile').textContent = 'Piirtopala on ' + hiddenTile.name + '.';
     if (focusTarget) focusTarget.focus({ preventScroll: true });
+  }
+
+  function bindLibraryFilters() {
+    byId('library-sort').addEventListener('change', event => {
+      libraryOrder = event.target.value;
+      try {
+        localStorage.setItem(LIBRARY_ORDER_KEY, libraryOrder);
+      } catch {
+        // Sorting remains available when browser storage is disabled.
+      }
+      renderLibrary();
+    });
+    byId('library-size').addEventListener('change', event => {
+      libraryFilters.size = event.target.value;
+      syncLibraryFilters();
+      renderLibrary();
+    });
+    byId('library-colors').addEventListener('click', event => {
+      const button = event.target.closest('button[data-color-filter]');
+      if (!button) return;
+      const color = button.dataset.colorFilter;
+      libraryFilters.color = libraryFilters.color === color ? '' : color;
+      syncLibraryFilters();
+      renderLibrary();
+    });
+    byId('library-tags').addEventListener('click', event => {
+      const button = event.target.closest('button[data-tag-filter]');
+      if (!button) return;
+      const key = button.dataset.tagFilter;
+      if (!libraryFilters.tags.delete(key)) libraryFilters.tags.add(key);
+      syncLibraryFilters();
+      renderLibrary();
+    });
+    byId('clear-library-filters').addEventListener('click', () => {
+      clearLibraryFilters();
+      renderLibrary();
+      byId('library-tools-summary').focus();
+    });
   }
 
   function removeTileFromLibrary(tile) {
@@ -441,6 +644,7 @@
     byId('tile-color').value = tile ? tile.color : '#347e73';
     byId('tile-width').value = tile ? tile.width : 10;
     byId('tile-height').value = tile ? tile.height : 10;
+    byId('tile-tags').value = (tile?.tags || []).join(', ');
     byId('tile-error').hidden = true;
     updateTileShape();
     tileDialog.showModal();
@@ -460,7 +664,17 @@
       error.hidden = false;
       return;
     }
-    const tile = { id: editingTileId || nextId('tile'), name, shape, color, width, height };
+    const tagsInput = byId('tile-tags');
+    let tags;
+    try {
+      tags = Model.normalizeTileTags(tagsInput.value.split(','));
+    } catch (invalid) {
+      error.textContent = invalid.message;
+      error.hidden = false;
+      tagsInput.focus();
+      return;
+    }
+    const tile = { id: editingTileId || nextId('tile'), name, shape, color, width, height, ...(tags.length ? { tags } : {}) };
     const tiles = editingTileId ? project.tiles.map(old => old.id === tile.id ? tile : old) : [...project.tiles, tile];
 
     const previous = placementIndex.tileTypes.get(editingTileId);
@@ -881,6 +1095,7 @@
       return;
     }
     selectedIds.clear();
+    clearLibraryFilters();
     resetView();
     commit(restored);
     setTool('draw');
@@ -889,6 +1104,7 @@
 
   function newProject() {
     selectedIds.clear();
+    clearLibraryFilters();
     resetView();
     commit(Model.blankProject(project.tiles.filter(tile => !tile.archived)));
     setTool('draw');
@@ -945,6 +1161,7 @@
   }
 
   bindSettings();
+  bindLibraryFilters();
   document.querySelectorAll('[data-tool].tool').forEach(button => {
     button.addEventListener('click', () => setTool(button.dataset.tool));
   });

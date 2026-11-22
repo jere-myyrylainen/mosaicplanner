@@ -134,6 +134,32 @@
     <aside class="library sidebar" aria-label="Palakirjasto">
       <section class="panel">
         <h2>Palakirjasto</h2>
+        <details class="library-tools" id="library-tools">
+          <summary id="library-tools-summary">
+            <span>Järjestä ja suodata</span>
+            <span id="library-filter-count" class="filter-count" hidden></span>
+          </summary>
+          <div class="library-filters">
+            <label class="field">Järjestys<select id="library-sort">
+              <option value="added">Lisäysjärjestys</option>
+              <option value="name-asc">Nimi A–Ö</option>
+              <option value="name-desc">Nimi Ö–A</option>
+            </select></label>
+            <label class="field">Koko<select id="library-size"><option value="">Kaikki koot</option></select></label>
+            <fieldset>
+              <legend>Väri</legend>
+              <div id="library-colors" class="filter-chips color-filters"></div>
+            </fieldset>
+            <fieldset>
+              <legend>Tunnisteet</legend>
+              <div id="library-tags" class="filter-chips tag-cloud"></div>
+              <p id="library-no-tags" class="library-note">Lisää tunnisteita palatyypin muokkauksessa.</p>
+            </fieldset>
+            <button type="button" id="clear-library-filters" class="button quiet clear-filters" hidden>Tyhjennä suodattimet</button>
+          </div>
+        </details>
+        <p id="library-result" class="library-note" role="status" hidden></p>
+        <p id="hidden-drawing-tile" class="library-note" hidden></p>
         <ul id="tile-list" class="tile-list" aria-label="Palatyypit"></ul>
         <p id="empty-library" class="empty-library" hidden>Palakirjasto on tyhjä.</p>
         <button type="button" id="add-tile-text" class="button add-tile-text"><svg class="icon"><use href="#i-plus"/></svg> Lisää pala</button>
@@ -179,6 +205,11 @@
       <div class="fields-row">
         <label class="field"><span id="tile-width-label">Leveys</span><span class="number-field"><input type="number" id="tile-width" min="0.5" max="10000" step="0.1" required><span>mm</span></span></label>
         <label class="field" id="tile-height-field">Korkeus<span class="number-field"><input type="number" id="tile-height" min="0.5" max="10000" step="0.1" required><span>mm</span></span></label>
+      </div>
+      <div class="field">
+        <label for="tile-tags">Tunnisteet</label>
+        <input type="text" id="tile-tags" maxlength="480" aria-describedby="tile-tags-hint" placeholder="Esim. lasi, ulkokäyttö">
+        <span class="field-hint" id="tile-tags-hint">Erota tunnisteet pilkulla.</span>
       </div>
       <p class="dialog-error" id="tile-error" role="alert" hidden></p>
       <div class="dialog-actions">
