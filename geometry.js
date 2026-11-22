@@ -352,6 +352,48 @@
     return typeof value === 'string' && Boolean(value.trim()) && value.length <= maxLength;
   }
 
+  function colorFamilies(hex) {
+    const rgb = Number.parseInt(hex.slice(1), 16);
+    const red = ((rgb >> 16) & 255) / 255;
+    const green = ((rgb >> 8) & 255) / 255;
+    const blue = (rgb & 255) / 255;
+    const high = Math.max(red, green, blue);
+    const low = Math.min(red, green, blue);
+    const chroma = high - low;
+    const lightness = (high + low) / 2;
+    const colors = new Set();
+
+    if (low >= .83) colors.add('white');
+    if (chroma <= .13 && high >= .22 && low <= .88) colors.add('gray');
+    if (high <= .22) colors.add('black');
+    if (chroma < .075) return colors;
+
+    let sector;
+    if (red === high) sector = (green - blue) / chroma;
+    else if (green === high) sector = (blue - red) / chroma + 2;
+    else sector = (red - green) / chroma + 4;
+    const hue = (sector * 60 + 360) % 360;
+
+    // Brown includes dark warm colors and muted ochre or sand shades.
+    const warmBrown = hue >= 7 && hue <= 64 &&
+      ((lightness <= .52 && chroma <= .75) || (lightness <= .84 && chroma <= .49));
+    const redBrown = (hue >= 349 || hue < 7) && low >= .095 && lightness <= .51 && chroma <= .58;
+    const brown = warmBrown || redBrown;
+    if (brown) colors.add('brown');
+
+    // The hue ranges overlap so shades near a boundary can match both families.
+    if ((hue >= 346 || hue <= 16) && lightness <= .75) colors.add('red');
+    if (hue >= 9 && hue <= 49 && (!brown || (lightness >= .42 && chroma >= .30))) colors.add('orange');
+    if ((hue >= 40 && hue <= 75) || (hue >= 34 && hue < 40 && lightness >= .58)) colors.add('yellow');
+    if (hue >= 67 && hue <= 165) colors.add('green');
+    if (hue >= 154 && hue <= 195) colors.add('teal');
+    if (hue >= 186 && hue <= 251) colors.add('blue');
+    if (hue >= 241 && hue <= (lightness < .38 ? 346 : 307)) colors.add('purple');
+    if ((hue >= 296 && hue <= 355 && lightness >= .38) ||
+        ((hue >= 340 || hue <= 22) && lightness >= .65)) colors.add('pink');
+    return colors;
+  }
+
   function tileTagKey(tag) {
     return tag.toLocaleLowerCase('fi').normalize('NFC');
   }
@@ -429,7 +471,7 @@
   }
 
   const model = {
-    MAX_PIECES, MAX_TYPES, MAX_STROKE, PlacementIndex, angleInDegrees, blankProject, demoProject,
+    MAX_PIECES, MAX_TYPES, MAX_STROKE, PlacementIndex, angleInDegrees, blankProject, colorFamilies, demoProject,
     fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard,
     readProject, sampleOutline, sampleSegment, tileTagKey, validNumber
   };

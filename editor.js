@@ -15,6 +15,11 @@
     pan: ['Siirrä näkymää', 'Siirrä näkymää vetämällä.']
   };
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
+  const colorLabels = new Map([
+    ['red', 'Punaiset'], ['orange', 'Oranssit'], ['yellow', 'Keltaiset'], ['green', 'Vihreät'],
+    ['teal', 'Turkoosit'], ['blue', 'Siniset'], ['purple', 'Violetit'], ['pink', 'Pinkit'],
+    ['brown', 'Ruskeat'], ['white', 'Valkoiset'], ['gray', 'Harmaat'], ['black', 'Mustat']
+  ]);
 
   const byId = id => document.getElementById(id);
   const canvas = byId('canvas');
@@ -39,6 +44,7 @@
   let libraryOrder = restoreLibraryOrder();
   let librarySource;
   let availableTiles = [];
+  let libraryTileColors = new Map();
   let activeTileId;
   let selectedIds = new Set();
   let editingTileId = null;
@@ -181,6 +187,7 @@
 
   function renderPieces() {
     const tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
+    const counts = new Map();
     const fragment = document.createDocumentFragment();
     pieceElements.clear();
     for (const piece of project.pieces) {
@@ -188,9 +195,48 @@
       const element = pieceShape(piece, tile, { class: 'piece-face', fill: tile.color, 'data-piece': piece.id });
       pieceElements.set(piece.id, element);
       fragment.append(element);
+      counts.set(tile.id, (counts.get(tile.id) || 0) + 1);
     }
     layers.pieces.replaceChildren(fragment);
     byId('work-count').textContent = projectSizeText() + ' · ' + pieceCount(project.pieces.length);
+    renderInventory(tileTypes, counts);
+  }
+
+  function tileSwatch(tile) {
+    const swatch = document.createElement('span');
+    swatch.className = 'tile-swatch ' + tile.shape;
+    swatch.style.setProperty('--tile-color', tile.color);
+    swatch.setAttribute('aria-hidden', 'true');
+    return swatch;
+  }
+
+  function renderInventory(tileTypes, counts) {
+    const tiles = [...counts.keys()].map(id => tileTypes.get(id));
+    tiles.sort((a, b) => nameOrder.compare(a.name, b.name));
+    const rows = document.createDocumentFragment();
+    for (const tile of tiles) {
+      const row = document.createElement('tr');
+      const heading = document.createElement('th');
+      heading.scope = 'row';
+      const label = document.createElement('span');
+      label.className = 'inventory-tile';
+      const name = document.createElement('span');
+      name.className = 'inventory-name';
+      name.textContent = tile.name;
+      const size = document.createElement('small');
+      size.className = 'inventory-size';
+      size.textContent = tileSizeText(tile);
+      name.append(size);
+      label.append(tileSwatch(tile), name);
+      heading.append(label);
+      const count = document.createElement('td');
+      count.textContent = countFormat.format(counts.get(tile.id));
+      row.append(heading, count);
+      rows.append(row);
+    }
+    byId('inventory-rows').replaceChildren(rows);
+    byId('inventory-table').hidden = counts.size === 0;
+    byId('empty-inventory').hidden = counts.size > 0;
   }
 
   function pieceCount(number) {
@@ -248,9 +294,12 @@
     const sizes = new Map();
     const colors = new Set();
     const tags = new Map();
+    libraryTileColors = new Map();
     for (const tile of availableTiles) {
       sizes.set(tileSizeKey(tile), tile);
-      colors.add(tile.color.toLowerCase());
+      const families = Model.colorFamilies(tile.color);
+      libraryTileColors.set(tile.id, families);
+      for (const family of families) colors.add(family);
       for (const label of tile.tags || []) {
         const key = Model.tileTagKey(label);
         if (!tags.has(key)) tags.set(key, { key, label, count: 0 });
@@ -271,21 +320,10 @@
       ...sizeOptions.map(([key, tile]) => new Option(tileSizeText(tile), key))
     );
 
-    const colorChips = byId('library-colors');
-    const colorButtons = document.createDocumentFragment();
-    const allColors = filterChip(colorButtons, '');
-    allColors.dataset.colorFilter = '';
-    allColors.textContent = 'Kaikki';
-    for (const color of [...colors].sort()) {
-      const button = filterChip(colorButtons, 'color-chip');
-      button.dataset.colorFilter = color;
-      button.title = color.toUpperCase();
-      button.setAttribute('aria-label', 'Väri ' + color.toUpperCase());
-      const swatch = document.createElement('span');
-      swatch.style.setProperty('--tile-color', color);
-      button.append(swatch);
-    }
-    colorChips.replaceChildren(colorButtons);
+    byId('library-color').replaceChildren(
+      new Option('Kaikki värit', ''),
+      ...[...colorLabels].filter(([key]) => colors.has(key)).map(([key, label]) => new Option(label, key))
+    );
 
     const tagChips = byId('library-tags');
     const tagButtons = document.createDocumentFragment();
@@ -316,9 +354,7 @@
   function syncLibraryFilters() {
     byId('library-sort').value = libraryOrder;
     byId('library-size').value = libraryFilters.size;
-    byId('library-colors').querySelectorAll('button').forEach(button => {
-      button.setAttribute('aria-pressed', button.dataset.colorFilter === libraryFilters.color);
-    });
+    byId('library-color').value = libraryFilters.color;
     byId('library-tags').querySelectorAll('button').forEach(button => {
       button.setAttribute('aria-pressed', libraryFilters.tags.has(button.dataset.tagFilter));
     });
@@ -341,7 +377,7 @@
     const { size, color, tags } = libraryFilters;
     const tiles = availableTiles.filter(tile => {
       if (size && tileSizeKey(tile) !== size) return false;
-      if (color && tile.color.toLowerCase() !== color) return false;
+      if (color && !libraryTileColors.get(tile.id).has(color)) return false;
       if (!tags.size) return true;
       const keys = new Set((tile.tags || []).map(Model.tileTagKey));
       return [...tags].every(tag => keys.has(tag));
@@ -378,11 +414,6 @@
       });
       if (tile.id === focusedTileId) focusTarget = choice;
 
-      const swatch = document.createElement('span');
-      swatch.className = 'tile-swatch ' + tile.shape;
-      swatch.style.setProperty('--tile-color', tile.color);
-      swatch.setAttribute('aria-hidden', 'true');
-
       const caption = document.createElement('span');
       caption.className = 'tile-caption';
       const name = document.createElement('strong');
@@ -397,7 +428,7 @@
         tags.title = tags.textContent;
         caption.append(tags);
       }
-      choice.append(swatch, caption);
+      choice.append(tileSwatch(tile), caption);
 
       const edit = document.createElement('button');
       edit.type = 'button';
@@ -445,11 +476,8 @@
       syncLibraryFilters();
       renderLibrary();
     });
-    byId('library-colors').addEventListener('click', event => {
-      const button = event.target.closest('button[data-color-filter]');
-      if (!button) return;
-      const color = button.dataset.colorFilter;
-      libraryFilters.color = libraryFilters.color === color ? '' : color;
+    byId('library-color').addEventListener('change', event => {
+      libraryFilters.color = event.target.value;
       syncLibraryFilters();
       renderLibrary();
     });
@@ -1115,6 +1143,12 @@
   function onKeyDown(event) {
     if (tileDialog.open || newDialog.open) return;
     const key = event.key.toLowerCase();
+    const inventory = byId('piece-inventory');
+    if (key === 'escape' && inventory.open) {
+      inventory.open = false;
+      byId('inventory-summary').focus();
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && key === 's') {
       event.preventDefault();
       exportProject();
