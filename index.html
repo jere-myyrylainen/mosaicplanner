@@ -90,7 +90,7 @@
     <section class="workspace" aria-label="Mosaiikin piirtoalue">
       <div class="toolbar">
         <div class="button-group" role="group" aria-label="Työkalut">
-          <button type="button" class="icon-button tool" data-tool="select" title="Valitse ja siirrä (V)" aria-label="Valitse ja siirrä"><svg class="icon"><use href="#i-pointer"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="select" title="Valitse ja siirrä (V tai Esc)" aria-label="Valitse ja siirrä" aria-keyshortcuts="V Escape"><svg class="icon"><use href="#i-pointer"/></svg></button>
           <button type="button" class="icon-button tool" data-tool="draw" title="Aseta pala tai piirrä vapaasti (B)" aria-label="Aseta pala tai piirrä vapaasti"><svg class="icon"><use href="#i-pencil"/></svg></button>
           <button type="button" class="icon-button tool" data-tool="line" title="Viiva (L)" aria-label="Viiva"><svg class="icon"><use href="#i-line"/></svg></button>
           <button type="button" class="icon-button tool" data-tool="shape" title="Muodon ääriviiva (M)" aria-label="Muodon ääriviiva"><svg class="icon"><use href="#i-shape"/></svg></button>
@@ -143,9 +143,13 @@
       </footer>
     </section>
 
-    <aside class="library sidebar" aria-label="Palakirjasto">
-      <section class="panel">
+    <aside class="library sidebar" id="tile-library" aria-label="Palakirjasto">
+      <div id="library-resizer" class="library-resizer" role="separator" tabindex="0"
+        aria-label="Palakirjaston leveys" aria-controls="tile-library" aria-orientation="vertical"
+        title="Säädä leveyttä vetämällä. Palauta oletus kaksoisnapsauttamalla."></div>
+      <section class="panel library-panel">
         <h2>Palakirjasto</h2>
+        <button type="button" id="add-tile-text" class="button add-tile-text"><svg class="icon"><use href="#i-plus"/></svg> Lisää pala</button>
         <details class="library-tools" id="library-tools">
           <summary id="library-tools-summary">
             <span>Järjestä ja suodata</span>
@@ -171,7 +175,6 @@
         <p id="hidden-drawing-tile" class="library-note" hidden></p>
         <ul id="tile-list" class="tile-list" aria-label="Palatyypit"></ul>
         <p id="empty-library" class="empty-library" hidden>Palakirjasto on tyhjä.</p>
-        <button type="button" id="add-tile-text" class="button add-tile-text"><svg class="icon"><use href="#i-plus"/></svg> Lisää pala</button>
       </section>
 
       <section class="panel selected-panel" id="selected-panel" hidden>

@@ -9,6 +9,7 @@ Voit myös tarjoilla projektikansion paikallisesti. Käynnistä kansiossa `pytho
 - Esimerkkityö Kompassiruusu avautuu ensimmäisellä käynnistyksellä. **Uusi** aloittaa tyhjän työn ja ottaa nykyisen palakirjaston mukaan.
 - Valitse alustaksi suorakulmio, ympyrä tai pyöristetty suorakulmio. Alustan, apuristikon ja palojen mitat syötetään millimetreinä.
 - Lisää palakirjastoon suorakulmion, ympyrän tai kolmion muotoisia paloja. Valitse palatyyppi ja aseta se napsauttamalla tai piirrä vetämällä. Viiva ja muoto asettavat paloja ääriviivalle. Täyttö asettaa paloja yhtenäiselle tyhjälle alueelle valitun palan mittojen mukaisessa ruudukossa.
+- Säädä palakirjaston leveyttä vetämällä sen vasenta reunaa tai valitsemalla säädin sarkaimella ja käyttämällä nuolinäppäimiä. Leveys tallentuu selaimeen. Kaksoisnapsautus palauttaa oletusleveyden.
 - Avaa palakirjastosta **Järjestä ja suodata**, kun haluat järjestää palat nimen mukaan tai suodattaa ne mittojen ja värin perusteella. Nimijärjestyksen valinta säilyy selaimessa.
 - Värisuodatin käyttää väriryhmiä, kuten ruskeita ja keltaisia. Sama sävy voi kuulua useaan ryhmään.
 - Lisää palatyypille pilkuilla erotetut tunnisteet, kuten `lasi, ulkokäyttö`. Tunnistepilvi näyttää, monellako palatyypillä tunniste on. Usean tunnisteen valinta näyttää palat, joilla on ne kaikki. Tunnisteet tallentuvat työn mukana.
@@ -27,6 +28,7 @@ Selain tallentaa viimeisimmän työn paikalliseen muistiin, jos selaimen asetuks
 | --- | --- |
 | V, B, L, M, G, H | Valinta, vapaa piirto, viiva, muoto, täyttö, näkymän siirto |
 | E | Pyyhekumi |
+| Esc | Palaa valintatyökaluun |
 | Välilyönti + veto | Siirrä näkymää |
 | R | Kierrä valittua palaa 15° |
 | Shift + napsautus tai veto | Muokkaa nykyistä valintaa |

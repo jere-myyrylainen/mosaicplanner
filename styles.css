@@ -65,12 +65,26 @@ h1 { margin: 0; font-size: 1.07rem; font-weight: 750; letter-spacing: -.035em; }
 .primary:hover { background: var(--accent-dark); }
 
 .editor {
+  --default-library-width: 252px;
   min-height: calc(100dvh - 68px); display: grid;
-  grid-template-columns: minmax(205px, 242px) minmax(0, 1fr) minmax(208px, 252px);
+  grid-template-columns: minmax(205px, 242px) minmax(0, 1fr) var(--library-width, var(--default-library-width));
 }
 .sidebar { background: var(--paper); min-width: 0; }
 .settings { border-right: 1px solid var(--line); }
-.library { border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+.library {
+  position: relative; border-left: 1px solid var(--line); display: flex; flex-direction: column;
+}
+.library-resizer {
+  position: absolute; z-index: 3; inset: 0 auto 0 -6px; width: 11px; cursor: col-resize; touch-action: none;
+}
+.library-resizer::after {
+  content: ""; position: absolute; left: 2px; top: calc(50% - 20px); width: 7px; height: 40px;
+  border: 1px solid #b1c5b8; border-radius: 6px; background: #e2eee7;
+}
+.library-resizer:hover, .library-resizer:focus-visible, .library-resizer.is-resizing { background: #285e4d24; }
+.library-resizer:hover::after, .library-resizer:focus-visible::after, .library-resizer.is-resizing::after {
+  background: var(--accent); border-color: var(--accent);
+}
 .panel { padding: 1.25rem 1.15rem; }
 .panel + .panel { border-top: 1px solid var(--line); }
 h2 { margin: 0; font-size: 1rem; font-weight: 750; letter-spacing: -.02em; }
@@ -238,7 +252,10 @@ select {
 .clear-filters { justify-self: start; min-height: 30px; padding: .25rem .35rem; color: var(--accent-dark); }
 .library-note { margin: .42rem 0 0; color: var(--muted); font-size: .8rem; }
 .field-hint { color: var(--muted); font-size: .8rem; font-weight: 400; }
-.tile-list { list-style: none; padding: 0; margin: .75rem 0 0; display: grid; gap: .36rem; max-height: min(52vh, 28rem); overflow: auto; }
+.tile-list {
+  list-style: none; padding: 0; margin: .75rem 0 0; display: grid; gap: .36rem; align-content: start;
+}
+.tile-list:empty { margin-top: 0; }
 .empty-library { margin: .6rem 0 0; color: var(--muted); font-size: .875rem; }
 .tile-row {
   display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, 26px); align-items: center;
@@ -273,8 +290,12 @@ select {
 .save-status { margin-top: auto; padding: .65rem 1.15rem; color: var(--muted); font-size: .8rem; }
 
 @media (min-width: 761px) and (min-height: 580px) {
-  .library { max-height: calc(100dvh - 68px); overflow-y: auto; }
-  .library > .panel { flex-shrink: 0; }
+  .library { max-height: calc(100dvh - 68px); }
+  .library > .selected-panel, .library > .save-status { flex: none; }
+  .library-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+  .library-panel > :not(.tile-list) { flex: none; }
+  .library-panel .tile-list { overflow-y: auto; }
+  .library-panel .tile-list:not(:empty) { min-height: 3.75rem; }
 }
 
 dialog {
@@ -294,17 +315,24 @@ dialog form > p { margin: 0; color: var(--muted); }
   background: #254037; color: white; box-shadow: 0 4px 15px #19352a28; font-size: .875rem;
 }
 @media (max-width: 990px) {
-  .editor { grid-template-columns: 185px minmax(0, 1fr) 190px; }
+  .editor {
+    --default-library-width: 190px;
+    grid-template-columns: 185px minmax(0, 1fr) var(--library-width, var(--default-library-width));
+  }
   .panel { padding-inline: .85rem; }
   .tool-name { display: none; }
 }
 @media (max-width: 760px) {
   .app-header { grid-template-columns: 1fr 1fr; padding-inline: .75rem; gap: .35rem .55rem; }
   .project-name { grid-row: 2; grid-column: 1 / -1; }
-  .editor { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
+  .editor {
+    --default-library-width: 50%;
+    grid-template-columns: minmax(0, 1fr) var(--library-width, var(--default-library-width)); min-height: 0;
+  }
   .workspace { grid-row: 1; grid-column: 1 / -1; grid-template-rows: auto minmax(330px, 60dvh) auto; }
   .sidebar { border-top: 1px solid var(--line); }
   .settings { border-right: 0; }
+  .library-resizer::after { top: 2.1rem; }
   .file-actions { gap: .12rem; }
 }
 @media (max-width: 460px) {

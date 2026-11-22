@@ -4,6 +4,7 @@
   const Model = window.MosaicGeometry;
   const STORAGE_KEY = 'mosaic-planner.project.v1';
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
+  const LIBRARY_WIDTH_KEY = 'mosaic-planner.library-width';
   const SVG = 'http://www.w3.org/2000/svg';
   const TOOLS = {
     select: ['Valitse', 'Rajaa palat vetämällä tyhjästä kohdasta tai valitse ne Shift-napsautuksilla. Siirrä valintaa vetämällä palasta.'],
@@ -22,6 +23,8 @@
   ]);
 
   const byId = id => document.getElementById(id);
+  const editor = document.querySelector('.editor');
+  const settings = document.querySelector('.settings');
   const canvas = byId('canvas');
   const stage = byId('stage');
   const layers = {
@@ -32,6 +35,9 @@
   };
   const newDialog = byId('new-dialog');
   const tileDialog = byId('tile-dialog');
+  const library = byId('tile-library');
+  const libraryResizer = byId('library-resizer');
+  const stackedLayout = window.matchMedia('(max-width: 760px)');
   const format = new Intl.NumberFormat('fi-FI', { maximumFractionDigits: 2 });
   const countFormat = new Intl.NumberFormat('fi-FI');
   const nameOrder = new Intl.Collator('fi-FI', { sensitivity: 'base', numeric: true });
@@ -42,6 +48,8 @@
 
   let project = restoreProject();
   let libraryOrder = restoreLibraryOrder();
+  let libraryWidth = restoreLibraryWidth();
+  let libraryResize = null;
   let librarySource;
   let availableTiles = [];
   let libraryTileColors = new Map();
@@ -75,6 +83,116 @@
       // The chosen order can still be used until the editor is closed.
     }
     return 'added';
+  }
+
+  function restoreLibraryWidth() {
+    try {
+      const width = Number(localStorage.getItem(LIBRARY_WIDTH_KEY));
+      if (Number.isFinite(width) && width > 0) return width;
+    } catch {
+      // The width can still be adjusted for this session.
+    }
+    return null;
+  }
+
+  function persistLibraryWidth() {
+    try {
+      if (libraryWidth === null) localStorage.removeItem(LIBRARY_WIDTH_KEY);
+      else localStorage.setItem(LIBRARY_WIDTH_KEY, libraryWidth);
+    } catch {
+      // The editor still uses the adjusted width when browser storage is unavailable.
+    }
+  }
+
+  function libraryWidthLimits() {
+    const stacked = stackedLayout.matches;
+    const min = stacked ? 144 : 178;
+    const reserved = stacked ? 144 : settings.offsetWidth + 330;
+    const max = Math.max(min, Math.min(640, editor.clientWidth - reserved));
+    return { min, max };
+  }
+
+  function clampLibraryWidth(width, { min, max }) {
+    return Math.round(Math.max(min, Math.min(width, max)));
+  }
+
+  function renderLibraryWidth() {
+    const limits = libraryWidthLimits();
+    if (libraryWidth === null) editor.style.removeProperty('--library-width');
+    else editor.style.setProperty('--library-width', clampLibraryWidth(libraryWidth, limits) + 'px');
+    const actualWidth = library.offsetWidth;
+    libraryResizer.setAttribute('aria-valuemin', limits.min);
+    libraryResizer.setAttribute('aria-valuemax', limits.max);
+    libraryResizer.setAttribute('aria-valuenow', actualWidth);
+    libraryResizer.setAttribute('aria-valuetext', actualWidth + ' pikseliä');
+  }
+
+  function moveLibraryResize(event) {
+    if (libraryResize?.pointerId !== event.pointerId) return;
+    const { startX, startWidth, previousWidth } = libraryResize;
+    const width = clampLibraryWidth(startWidth + startX - event.clientX, libraryWidthLimits());
+    libraryWidth = width === startWidth ? previousWidth : width;
+    renderLibraryWidth();
+  }
+
+  function finishLibraryResize(keep) {
+    if (!libraryResize) return;
+    const { pointerId, previousWidth } = libraryResize;
+    libraryResize = null;
+    libraryResizer.classList.remove('is-resizing');
+    if (libraryResizer.hasPointerCapture(pointerId)) libraryResizer.releasePointerCapture(pointerId);
+    if (keep) {
+      if (libraryWidth !== previousWidth) persistLibraryWidth();
+    } else {
+      libraryWidth = previousWidth;
+      renderLibraryWidth();
+    }
+  }
+
+  function bindLibraryResize() {
+    libraryResizer.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || gesture || libraryResize) return;
+      libraryResize = {
+        pointerId: event.pointerId, startX: event.clientX, startWidth: library.offsetWidth, previousWidth: libraryWidth
+      };
+      libraryResizer.focus({ preventScroll: true });
+      libraryResizer.classList.add('is-resizing');
+      libraryResizer.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+    libraryResizer.addEventListener('pointermove', moveLibraryResize);
+    libraryResizer.addEventListener('pointerup', event => {
+      if (libraryResize?.pointerId !== event.pointerId) return;
+      moveLibraryResize(event);
+      finishLibraryResize(true);
+    });
+    for (const name of ['pointercancel', 'lostpointercapture']) {
+      libraryResizer.addEventListener(name, event => {
+        if (libraryResize?.pointerId === event.pointerId) finishLibraryResize(false);
+      });
+    }
+    libraryResizer.addEventListener('dblclick', () => {
+      libraryWidth = null;
+      renderLibraryWidth();
+      persistLibraryWidth();
+    });
+    libraryResizer.addEventListener('keydown', event => {
+      if (gesture || libraryResize) return;
+      const limits = libraryWidthLimits();
+      const step = event.shiftKey ? 48 : 16;
+      const widths = {
+        ArrowLeft: library.offsetWidth + step, ArrowRight: library.offsetWidth - step,
+        Home: limits.min, End: limits.max
+      };
+      const width = widths[event.key];
+      if (!Number.isFinite(width)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      libraryWidth = clampLibraryWidth(width, limits);
+      renderLibraryWidth();
+      persistLibraryWidth();
+    });
+    new ResizeObserver(renderLibraryWidth).observe(editor);
   }
 
   function persist() {
@@ -850,7 +968,7 @@
   }
 
   function beginPointer(event) {
-    if (gesture || (event.button !== 0 && event.button !== 1)) return;
+    if (gesture || libraryResize || (event.button !== 0 && event.button !== 1)) return;
     if (tileDialog.open) return;
     const point = surfacePoint(event);
     const pan = tool === 'pan' || spacePressed || event.button === 1;
@@ -1143,10 +1261,9 @@
   function onKeyDown(event) {
     if (tileDialog.open || newDialog.open) return;
     const key = event.key.toLowerCase();
-    const inventory = byId('piece-inventory');
-    if (key === 'escape' && inventory.open) {
-      inventory.open = false;
-      byId('inventory-summary').focus();
+    if (key === 'escape') {
+      event.preventDefault();
+      returnToSelection();
       return;
     }
     if ((event.metaKey || event.ctrlKey) && key === 's') {
@@ -1179,9 +1296,23 @@
       removeSelected();
     }
     if (key === 'r') rotateByStep();
-    if (key === 'escape') {
-      applySelection(new Set());
+  }
+
+  function returnToSelection() {
+    if (gesture) {
+      const { pointerId } = gesture;
+      endPointer({ type: 'pointercancel', pointerId });
+      if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
     }
+    finishLibraryResize(false);
+    stopSpacePan();
+    const inventory = byId('piece-inventory');
+    if (inventory.open) {
+      inventory.open = false;
+      byId('inventory-summary').focus();
+    }
+    applySelection(new Set());
+    setTool('select');
   }
 
   function stopSpacePan() {
@@ -1196,6 +1327,8 @@
 
   bindSettings();
   bindLibraryFilters();
+  renderLibraryWidth();
+  bindLibraryResize();
   document.querySelectorAll('[data-tool].tool').forEach(button => {
     button.addEventListener('click', () => setTool(button.dataset.tool));
   });
@@ -1204,6 +1337,7 @@
   byId('cancel-tile').addEventListener('click', () => tileDialog.close());
   byId('tile-shape').addEventListener('change', updateTileShape);
   byId('tile-form').addEventListener('submit', saveTile);
+  tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
   byId('rotate').addEventListener('click', rotateByStep);
@@ -1221,6 +1355,7 @@
   newDialog.addEventListener('close', () => {
     if (newDialog.returnValue === 'new') newProject();
   });
+  newDialog.addEventListener('cancel', returnToSelection);
   byId('save-project').addEventListener('click', exportProject);
   byId('open-project').addEventListener('click', () => byId('import-file').click());
   byId('import-file').addEventListener('change', importProject);
