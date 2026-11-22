@@ -5,6 +5,10 @@
   const MAX_PIECES = 12000;
   const MAX_TYPES = 200;
   const MAX_STROKE = 2500;
+  const MAX_REFERENCES = 8;
+  const MAX_REFERENCE_FILE = 12 * 1024 * 1024;
+  const MAX_REFERENCE_DATA = 24 * 1024 * 1024;
+  const REFERENCE_POSITION_LIMIT = 50000;
   const CELL_SIZE = 32;
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
@@ -300,7 +304,8 @@
       seam: 2,
       grid: { visible: true, size: 12, weight: 0.2, snap: false },
       tiles,
-      pieces: []
+      pieces: [],
+      references: []
     };
   }
 
@@ -415,6 +420,47 @@
     return [...tags.values()];
   }
 
+  function referenceWidthLimit(pixelWidth, pixelHeight) {
+    return Math.min(50000, 50000 * pixelWidth / pixelHeight);
+  }
+
+  function validReferenceDimensions(width, height) {
+    return Number.isInteger(width) && Number.isInteger(height) &&
+      validNumber(width, 1, 32768) && validNumber(height, 1, 32768) && width * height <= 80000000;
+  }
+
+  function validReferenceSource(source) {
+    if (typeof source !== 'string' || source.length > 4 * Math.ceil(MAX_REFERENCE_FILE / 3) + 23) return false;
+    const png = 'data:image/png;base64,';
+    const jpeg = 'data:image/jpeg;base64,';
+    let data;
+    if (source.startsWith(png + 'iVBORw0KGgo')) data = source.slice(png.length);
+    else if (source.startsWith(jpeg + '/9j/')) data = source.slice(jpeg.length);
+    else return false;
+    return data.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(data);
+  }
+
+  function readReferences(values) {
+    const error = 'Työn apukuvat eivät ole kelvollisia JPG- tai PNG-kuvia.';
+    if (!Array.isArray(values) || values.length > MAX_REFERENCES) throw new Error(error);
+    const seen = new Set();
+    let dataLength = 0;
+    return values.map(reference => {
+      if (!reference) throw new Error(error);
+      const { id, name, source, pixelWidth, pixelHeight, x, y, width, opacity, visible } = reference;
+      if (!validText(id, 100) || seen.has(id) || !validText(name, 160) || !validReferenceSource(source) ||
+          !validReferenceDimensions(pixelWidth, pixelHeight) ||
+          !validNumber(x, -REFERENCE_POSITION_LIMIT, REFERENCE_POSITION_LIMIT) ||
+          !validNumber(y, -REFERENCE_POSITION_LIMIT, REFERENCE_POSITION_LIMIT) ||
+          !validNumber(width, .1, referenceWidthLimit(pixelWidth, pixelHeight)) ||
+          !validNumber(opacity, 0, 1) || typeof visible !== 'boolean') throw new Error(error);
+      dataLength += source.length;
+      if (dataLength > MAX_REFERENCE_DATA) throw new Error('Työssä on liian paljon apukuvadataa.');
+      seen.add(id);
+      return { id, name, source, pixelWidth, pixelHeight, x, y, width, opacity, visible };
+    });
+  }
+
   function readProject(value) {
     const error = 'Tiedosto ei ole kelvollinen Mosaic Planner -työ.';
     if (!value || value.version !== 1 || !validText(value.name, 80)) throw new Error(error);
@@ -455,6 +501,7 @@
     restored.board = { shape: board.shape, width: board.width, height: board.height, radius: board.radius };
     restored.grid = { visible: grid.visible, size: grid.size, weight: grid.weight, snap: grid.snap };
     restored.seam = seam;
+    if (value.references !== undefined) restored.references = readReferences(value.references);
     const index = new PlacementIndex({ ...restored, seam: 0 });
     for (const piece of pieces) {
       if (!piece || !validText(piece.id, 100) || ids.has(piece.id) || !tileTypes.has(piece.tileId) ||
@@ -471,9 +518,10 @@
   }
 
   const model = {
-    MAX_PIECES, MAX_TYPES, MAX_STROKE, PlacementIndex, angleInDegrees, blankProject, colorFamilies, demoProject,
-    fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard,
-    readProject, sampleOutline, sampleSegment, tileTagKey, validNumber
+    MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
+    REFERENCE_POSITION_LIMIT, PlacementIndex, angleInDegrees, blankProject, colorFamilies, demoProject,
+    fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
+    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, validNumber, validReferenceDimensions
   };
 
   if (typeof module === 'object') module.exports = model;

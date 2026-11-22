@@ -7,9 +7,10 @@
   <title>Mosaic Planner</title>
   <link rel="stylesheet" href="styles.css">
   <script defer src="geometry.js"></script>
+  <script defer src="project-storage.js"></script>
   <script defer src="editor.js"></script>
 </head>
-<body>
+<body inert>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="i-mosaic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
     <symbol id="i-rectangle" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14"/></symbol>
@@ -85,6 +86,33 @@
           <label class="check-field"><input type="checkbox" id="grid-snap"> Tartu apuristikkoon</label>
         </div>
       </section>
+      <section class="panel reference-panel">
+        <h2>Apukuvat</h2>
+        <button type="button" id="add-reference" class="button add-reference" title="Lisää JPG- tai PNG-kuva">
+          <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg> Lisää kuva
+        </button>
+        <input type="file" id="reference-file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple hidden>
+        <div id="reference-controls" class="panel-fields" hidden>
+          <label class="field">Kuva<select id="reference-select"></select></label>
+          <label class="field">Kuvan leveys<span class="number-field">
+            <input type="number" id="reference-width" min="0.1" step="any"><span>mm</span>
+          </span></label>
+          <div class="field">
+            <div class="reference-opacity-label">
+              <label for="reference-opacity">Peittävyys</label><output id="reference-opacity-value" for="reference-opacity"></output>
+            </div>
+            <input type="range" id="reference-opacity" min="0" max="100" step="1">
+          </div>
+          <label class="check-field"><input type="checkbox" id="reference-visible"> Näytä kuva</label>
+          <div class="reference-actions">
+            <button type="button" data-tool="reference" class="button tool quiet" title="Siirrä kuvaa vetämällä työalueella">Siirrä kuvaa</button>
+            <button type="button" id="fit-reference" class="button quiet">Sovita alustalle</button>
+            <button type="button" id="remove-reference" class="button quiet delete-button">
+              <svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg> Poista apukuva
+            </button>
+          </div>
+        </div>
+      </section>
     </aside>
 
     <section class="workspace" aria-label="Mosaiikin piirtoalue">
@@ -111,8 +139,11 @@
         <svg id="canvas" xmlns="http://www.w3.org/2000/svg" aria-label="Mosaiikkialusta" role="img">
           <defs>
             <pattern id="grid-pattern" patternUnits="userSpaceOnUse"><path id="grid-lines" fill="none" stroke="#59695e" stroke-opacity=".28"/></pattern>
+            <clipPath id="board-clip"></clipPath>
           </defs>
           <g id="board-layer"></g>
+          <g id="reference-layer" clip-path="url(#board-clip)" pointer-events="none"></g>
+          <g id="grid-layer" pointer-events="none"></g>
           <g id="piece-layer"></g>
           <g id="preview-layer" pointer-events="none"></g>
           <g id="selection-layer" pointer-events="none"></g>

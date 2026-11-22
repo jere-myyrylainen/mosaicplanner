@@ -8,6 +8,7 @@ Voit myös tarjoilla projektikansion paikallisesti. Käynnistä kansiossa `pytho
 
 - Esimerkkityö Kompassiruusu avautuu ensimmäisellä käynnistyksellä. **Uusi** aloittaa tyhjän työn ja ottaa nykyisen palakirjaston mukaan.
 - Valitse alustaksi suorakulmio, ympyrä tai pyöristetty suorakulmio. Alustan, apuristikon ja palojen mitat syötetään millimetreinä.
+- Lisää **Apukuvat**-kohdasta JPG- tai PNG-kuvia ristikon ja mosaiikkipalojen alle. Säädä valitun kuvan leveyttä ja peittävyyttä tai valitse **Siirrä kuvaa** ja vedä työalueella. Apukuvat tallentuvat työn JSON-tiedostoon.
 - Lisää palakirjastoon suorakulmion, ympyrän tai kolmion muotoisia paloja. Valitse palatyyppi ja aseta se napsauttamalla tai piirrä vetämällä. Viiva ja muoto asettavat paloja ääriviivalle. Täyttö asettaa paloja yhtenäiselle tyhjälle alueelle valitun palan mittojen mukaisessa ruudukossa.
 - Säädä palakirjaston leveyttä vetämällä sen vasenta reunaa tai valitsemalla säädin sarkaimella ja käyttämällä nuolinäppäimiä. Leveys tallentuu selaimeen. Kaksoisnapsautus palauttaa oletusleveyden.
 - Avaa palakirjastosta **Järjestä ja suodata**, kun haluat järjestää palat nimen mukaan tai suodattaa ne mittojen ja värin perusteella. Nimijärjestyksen valinta säilyy selaimessa.

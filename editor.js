@@ -2,7 +2,8 @@
   'use strict';
 
   const Model = window.MosaicGeometry;
-  const STORAGE_KEY = 'mosaic-planner.project.v1';
+  const Storage = window.MosaicStorage;
+  const MAX_PROJECT_FILE = 32 * 1024 * 1024;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const LIBRARY_WIDTH_KEY = 'mosaic-planner.library-width';
   const SVG = 'http://www.w3.org/2000/svg';
@@ -13,6 +14,7 @@
     shape: ['Muoto', 'Vedä muodon vastakkaisten kulmien välillä.'],
     fill: ['Täyttö', 'Napsauta tyhjää aluetta, jonka haluat täyttää.'],
     erase: ['Pyyhekumi', 'Poista pala napsauttamalla tai poista useita paloja vetämällä.'],
+    reference: ['Siirrä apukuvaa', 'Vedä työalueella siirtääksesi apukuvaa. Esc palauttaa valintatyökalun.'],
     pan: ['Siirrä näkymää', 'Siirrä näkymää vetämällä.']
   };
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
@@ -29,6 +31,8 @@
   const stage = byId('stage');
   const layers = {
     board: byId('board-layer'),
+    references: byId('reference-layer'),
+    grid: byId('grid-layer'),
     pieces: byId('piece-layer'),
     preview: byId('preview-layer'),
     selection: byId('selection-layer')
@@ -44,9 +48,15 @@
   const past = [];
   const future = [];
   const pieceElements = new Map();
+  const referenceElements = new Map();
   const libraryFilters = { size: '', color: '', tags: new Set() };
 
-  let project = restoreProject();
+  let project = Model.demoProject();
+  let projectGeneration = 0;
+  let saveGeneration = 0;
+  let activeReferenceId;
+  let renderedReferences;
+  let addingReferences = false;
   let libraryOrder = restoreLibraryOrder();
   let libraryWidth = restoreLibraryWidth();
   let libraryResize = null;
@@ -64,16 +74,6 @@
   let zoom = 1;
   let viewCenter = { x: 0, y: 0 };
   let idSequence = 0;
-
-  function restoreProject() {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return Model.readProject(JSON.parse(saved));
-    } catch {
-      // A demo remains available when browser storage is disabled or unreadable.
-    }
-    return Model.demoProject();
-  }
 
   function restoreLibraryOrder() {
     try {
@@ -195,12 +195,15 @@
     new ResizeObserver(renderLibraryWidth).observe(editor);
   }
 
-  function persist() {
+  async function persist() {
+    const generation = ++saveGeneration;
+    const status = byId('save-status');
+    status.textContent = 'Tallennetaan tähän selaimeen…';
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-      byId('save-status').textContent = 'Tallennettu tähän selaimeen';
+      await Storage.save(project);
+      if (generation === saveGeneration) status.textContent = 'Tallennettu tähän selaimeen';
     } catch {
-      byId('save-status').textContent = 'Paikallinen tallennus ei onnistu. Tallenna työ tiedostoksi.';
+      if (generation === saveGeneration) status.textContent = 'Paikallinen tallennus ei onnistu. Tallenna työ tiedostoksi.';
     }
   }
 
@@ -212,13 +215,14 @@
     useProject(next);
   }
 
-  function useProject(next) {
+  function useProject(next, save = true) {
     if (next.tiles.some(tile => tile.archived)) {
       const inUse = new Set(next.pieces.map(piece => piece.tileId));
       const tiles = next.tiles.filter(tile => !tile.archived || inUse.has(tile.id));
       if (tiles.length !== next.tiles.length) next = { ...next, tiles };
     }
     project = next;
+    if (!selectedReference()) activeReferenceId = project.references[0]?.id;
     if (!project.tiles.some(tile => tile.id === activeTileId && !tile.archived)) {
       activeTileId = project.tiles.find(tile => !tile.archived)?.id;
     }
@@ -228,7 +232,7 @@
     placementIndex = new Model.PlacementIndex(project);
     renderTools();
     renderAll();
-    persist();
+    if (save) persist();
   }
 
   function undo() {
@@ -299,8 +303,195 @@
     lines.setAttribute('stroke-width', grid.weight);
 
     layers.board.replaceChildren(boardShape(board, { class: 'board-shadow', fill: '#fdfbf3' }));
-    if (grid.visible) layers.board.append(boardShape(board, { fill: 'url(#grid-pattern)' }));
-    layers.board.append(boardShape(board, { class: 'board-outline', fill: 'none', 'pointer-events': 'none' }));
+    byId('board-clip').replaceChildren(boardShape(board, {}));
+    layers.grid.replaceChildren();
+    if (grid.visible) layers.grid.append(boardShape(board, { fill: 'url(#grid-pattern)' }));
+    layers.grid.append(boardShape(board, { class: 'board-outline', fill: 'none' }));
+  }
+
+  function selectedReference() {
+    return project.references.find(reference => reference.id === activeReferenceId);
+  }
+
+  function paintReference(reference) {
+    const element = referenceElements.get(reference.id);
+    const height = reference.width * reference.pixelHeight / reference.pixelWidth;
+    element.setAttribute('x', reference.x - reference.width / 2);
+    element.setAttribute('y', reference.y - height / 2);
+    element.setAttribute('width', reference.width);
+    element.setAttribute('height', height);
+    element.setAttribute('opacity', reference.opacity);
+    element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
+  }
+
+  function renderReferences() {
+    if (renderedReferences !== project.references) {
+      const previous = new Map(referenceElements);
+      referenceElements.clear();
+      const fragment = document.createDocumentFragment();
+      for (const reference of project.references) {
+        const element = previous.get(reference.id) || svgElement('image', { 'data-reference': reference.id });
+        if (element.getAttribute('href') !== reference.source) element.setAttribute('href', reference.source);
+        referenceElements.set(reference.id, element);
+        paintReference(reference);
+        fragment.append(element);
+      }
+      layers.references.replaceChildren(fragment);
+      byId('reference-select').replaceChildren(
+        ...project.references.map(reference => new Option(reference.name, reference.id))
+      );
+      renderedReferences = project.references;
+    }
+    renderReferenceControls();
+  }
+
+  function renderReferenceControls() {
+    const selected = selectedReference();
+    byId('reference-controls').hidden = !selected;
+    byId('add-reference').disabled = addingReferences || project.references.length >= Model.MAX_REFERENCES;
+    if (!selected) return;
+    byId('reference-select').value = selected.id;
+    const width = byId('reference-width');
+    width.max = Model.referenceWidthLimit(selected.pixelWidth, selected.pixelHeight);
+    width.value = Number(selected.width.toFixed(3));
+    byId('reference-opacity').value = Math.round(selected.opacity * 100);
+    byId('reference-opacity-value').textContent = Math.round(selected.opacity * 100) + ' %';
+    byId('reference-visible').checked = selected.visible;
+  }
+
+  function fittedReference(reference) {
+    const { board } = project;
+    const ratio = reference.pixelWidth / reference.pixelHeight;
+    const width = Math.min(board.width, board.height * ratio) * .92;
+    return { x: 0, y: 0, width: Math.max(.1, width) };
+  }
+
+  function editReference(reference, changes) {
+    if (!reference || gesture || Object.keys(changes).every(key => reference[key] === changes[key])) return;
+    const references = project.references.map(image => image.id === reference.id ? { ...image, ...changes } : image);
+    commit({ ...project, references });
+  }
+
+  async function readReferenceFile(file) {
+    if (file.size > Model.MAX_REFERENCE_FILE) throw new Error('Apukuva saa olla enintään 12 Mt.');
+    const bytes = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+    const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+    const png = pngSignature.every((byte, index) => bytes[index] === byte);
+    if (!jpeg && !png) throw new Error('Valitse JPG- tai PNG-kuva.');
+
+    const blob = new Blob([file], { type: jpeg ? 'image/jpeg' : 'image/png' });
+    const url = URL.createObjectURL(blob);
+    let dimensions;
+    try {
+      dimensions = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve({ pixelWidth: image.naturalWidth, pixelHeight: image.naturalHeight });
+        image.onerror = () => reject(new Error('Kuvan avaaminen ei onnistunut.'));
+        image.src = url;
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    if (!Model.validReferenceDimensions(dimensions.pixelWidth, dimensions.pixelHeight)) {
+      throw new Error('Apukuvan pikselimitat ovat liian suuret.');
+    }
+    const source = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Kuvan lukeminen ei onnistunut.'));
+      reader.readAsDataURL(blob);
+    });
+    return { source, ...dimensions };
+  }
+
+  async function importReferences(event) {
+    const input = event.target;
+    const files = [...input.files];
+    input.value = '';
+    if (!files.length || addingReferences) return;
+
+    const generation = projectGeneration;
+    const images = [];
+    const problems = [];
+    addingReferences = true;
+    renderReferenceControls();
+    try {
+      for (const file of files) {
+        if (generation !== projectGeneration) return;
+        if (project.references.length + images.length >= Model.MAX_REFERENCES) {
+          problems.push('Työhön mahtuu enintään ' + Model.MAX_REFERENCES + ' apukuvaa.');
+          break;
+        }
+        try {
+          images.push({ ...await readReferenceFile(file), name: file.name.trim().slice(0, 160) || 'Apukuva' });
+        } catch (error) {
+          problems.push(error.message);
+        }
+      }
+      if (generation !== projectGeneration) return;
+      if (gesture) {
+        notify('Lopeta käynnissä oleva veto ja lisää apukuvat uudelleen.');
+        return;
+      }
+      const references = [...project.references];
+      let totalSize = references.reduce((size, reference) => size + reference.source.length, 0);
+      for (const image of images) {
+        if (totalSize + image.source.length > Model.MAX_REFERENCE_DATA) {
+          problems.push('Työn apukuville varattu tila on täynnä.');
+          continue;
+        }
+        totalSize += image.source.length;
+        references.push({ ...image, id: nextId('reference'), ...fittedReference(image), opacity: .5, visible: true });
+      }
+      const added = references.length - project.references.length;
+      if (added) {
+        activeReferenceId = references[references.length - 1].id;
+        commit({ ...project, references });
+        byId('reference-controls').scrollIntoView({ block: 'nearest' });
+      }
+      const success = added === 1 ? 'Apukuva lisättiin.' : 'Lisättiin ' + countFormat.format(added) + ' apukuvaa.';
+      notify([added ? success : '', ...new Set(problems)].filter(Boolean).join(' '));
+    } finally {
+      addingReferences = false;
+      renderReferenceControls();
+    }
+  }
+
+  function bindReferences() {
+    byId('add-reference').addEventListener('click', () => byId('reference-file').click());
+    byId('reference-file').addEventListener('change', importReferences);
+    byId('reference-select').addEventListener('change', event => {
+      if (gesture) return;
+      activeReferenceId = event.target.value;
+      renderReferenceControls();
+      renderTools();
+    });
+    numericChange('reference-width', () => selectedReference()?.width, width => editReference(selectedReference(), { width }));
+    byId('reference-opacity').addEventListener('input', event => {
+      const reference = selectedReference();
+      if (!reference || gesture) return;
+      const amount = event.target.valueAsNumber;
+      paintReference({ ...reference, opacity: amount / 100 });
+      byId('reference-opacity-value').textContent = amount + ' %';
+    });
+    byId('reference-opacity').addEventListener('change', event => {
+      editReference(selectedReference(), { opacity: event.target.valueAsNumber / 100 });
+    });
+    byId('reference-visible').addEventListener('change', event => {
+      editReference(selectedReference(), { visible: event.target.checked });
+    });
+    byId('fit-reference').addEventListener('click', () => {
+      const reference = selectedReference();
+      if (reference) editReference(reference, fittedReference(reference));
+    });
+    byId('remove-reference').addEventListener('click', () => {
+      if (gesture || !selectedReference()) return;
+      const references = project.references.filter(reference => reference.id !== activeReferenceId);
+      commit({ ...project, references });
+      byId(references.length ? 'reference-select' : 'add-reference').focus({ preventScroll: true });
+      notify('Apukuva poistettiin.');
+    });
   }
 
   function renderPieces() {
@@ -671,6 +862,7 @@
     layers.preview.replaceChildren();
     renderSettings();
     renderBoard();
+    renderReferences();
     renderPieces();
     renderLibrary();
     renderSelection();
@@ -680,7 +872,8 @@
   }
 
   function setTool(name) {
-    if (gesture || (!activeTileId && tileTools.has(name))) return;
+    if (gesture || (!activeTileId && tileTools.has(name)) ||
+        (name === 'reference' && !selectedReference()?.visible)) return;
     tool = name;
     if (name !== 'select') {
       selectedIds.clear();
@@ -692,10 +885,13 @@
 
   function renderTools() {
     if (!activeTileId && tileTools.has(tool)) tool = 'select';
+    const canMoveReference = Boolean(selectedReference()?.visible);
+    if (!canMoveReference && tool === 'reference') tool = 'select';
     stage.dataset.tool = tool;
     document.querySelectorAll('[data-tool].tool').forEach(button => {
       button.setAttribute('aria-pressed', button.dataset.tool === tool);
-      button.disabled = !activeTileId && tileTools.has(button.dataset.tool);
+      button.disabled = (!activeTileId && tileTools.has(button.dataset.tool)) ||
+        (!canMoveReference && button.dataset.tool === 'reference');
     });
     byId('tool-name').textContent = TOOLS[tool][0];
     byId('tool-hint').textContent = TOOLS[tool][1];
@@ -969,7 +1165,7 @@
 
   function beginPointer(event) {
     if (gesture || libraryResize || (event.button !== 0 && event.button !== 1)) return;
-    if (tileDialog.open) return;
+    if (tileDialog.open || newDialog.open) return;
     const point = surfacePoint(event);
     const pan = tool === 'pan' || spacePressed || event.button === 1;
     const tile = placementIndex.tileTypes.get(activeTileId);
@@ -985,6 +1181,8 @@
     } else if (tool === 'select') {
       gesture = beginSelection(event, point);
       if (!gesture) return;
+    } else if (tool === 'reference') {
+      gesture = { kind: 'reference', origin: point, reference: selectedReference() };
     } else if (tool === 'erase') {
       gesture = { kind: 'erase', previous: point, erased: new Set() };
       const element = event.target.closest('[data-piece]');
@@ -1090,6 +1288,13 @@
       previewMove(current, point);
     } else if (current.kind === 'marquee') {
       updateMarquee(current, point);
+    } else if (current.kind === 'reference') {
+      const limit = Model.REFERENCE_POSITION_LIMIT;
+      const { origin, reference } = current;
+      const x = Math.max(-limit, Math.min(limit, reference.x + (point.x - origin.x)));
+      const y = Math.max(-limit, Math.min(limit, reference.y + (point.y - origin.y)));
+      current.position = { x, y };
+      paintReference({ ...reference, ...current.position });
     } else if (current.kind === 'erase') {
       if (point.x === current.previous.x && point.y === current.previous.y) return;
       for (const piece of placementIndex.piecesAlong(current.previous, point)) erasePiece(current, piece.id);
@@ -1131,6 +1336,11 @@
     }
     if (current.kind === 'marquee') {
       if (event.type !== 'pointerup') applySelection(current.original);
+      return;
+    }
+    if (current.kind === 'reference') {
+      if (event.type === 'pointerup' && current.position) editReference(current.reference, current.position);
+      else paintReference(current.reference);
       return;
     }
     if (current.kind === 'erase') {
@@ -1225,8 +1435,8 @@
     const file = input.files[0];
     input.value = '';
     if (!file) return;
-    if (file.size > 8 * 1024 * 1024) {
-      notify('Valitse enintään 8 Mt:n kokoinen Mosaic Planner -tiedosto.');
+    if (file.size > MAX_PROJECT_FILE) {
+      notify('Valitse enintään 32 Mt:n kokoinen Mosaic Planner -tiedosto.');
       return;
     }
     let restored;
@@ -1240,6 +1450,7 @@
       notify('Lopeta käynnissä oleva piirto ja avaa tiedosto uudelleen.');
       return;
     }
+    projectGeneration++;
     selectedIds.clear();
     clearLibraryFilters();
     resetView();
@@ -1249,6 +1460,8 @@
   }
 
   function newProject() {
+    if (gesture) return;
+    projectGeneration++;
     selectedIds.clear();
     clearLibraryFilters();
     resetView();
@@ -1259,7 +1472,7 @@
   }
 
   function onKeyDown(event) {
-    if (tileDialog.open || newDialog.open) return;
+    if (!placementIndex || tileDialog.open || newDialog.open) return;
     const key = event.key.toLowerCase();
     if (key === 'escape') {
       event.preventDefault();
@@ -1327,6 +1540,7 @@
 
   bindSettings();
   bindLibraryFilters();
+  bindReferences();
   renderLibraryWidth();
   bindLibraryResize();
   document.querySelectorAll('[data-tool].tool').forEach(button => {
@@ -1347,7 +1561,7 @@
   byId('zoom-out').addEventListener('click', () => changeZoom(.8));
   byId('zoom-fit').addEventListener('click', resetView);
   byId('new-project').addEventListener('click', () => {
-    if (project.pieces.length) {
+    if (project.pieces.length || project.references.length) {
       newDialog.returnValue = '';
       newDialog.showModal();
     } else newProject();
@@ -1380,6 +1594,18 @@
   window.addEventListener('blur', stopSpacePan);
   new ResizeObserver(renderView).observe(stage);
 
-  useProject(project);
-  setTool('draw');
+  async function initialize() {
+    try {
+      const saved = await Storage.load();
+      useProject(saved ? Model.readProject(saved) : project);
+    } catch {
+      useProject(project, false);
+      byId('save-status').textContent = 'Selaimeen tallennettua työtä ei voitu avata.';
+    } finally {
+      setTool('draw');
+      document.body.removeAttribute('inert');
+    }
+  }
+
+  initialize();
 }());
