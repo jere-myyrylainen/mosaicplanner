@@ -139,7 +139,7 @@
     fillHint: ["Napsauta tyhjää aluetta, jonka haluat täyttää.", "Click the empty area you want to fill."],
     eraseHint: ["Poista pala napsauttamalla tai poista useita paloja vetämällä.", "Click to erase one tile or drag to erase several."],
     referenceHint: ["Vedä työalueella siirtääksesi apukuvaa. Esc palauttaa valintatyökalun.", "Drag on the canvas to move the reference image. Press Esc to return to the selection tool."],
-    guideLineHint: ["Vedä viivaohjurin alusta loppuun.", "Drag from one end of the line guide to the other."],
+    guideLineHint: ["Vedä viivaohjuri. Sen päät tarttuvat lähellä oleviin reunapisteisiin.", "Drag a line guide. Its ends snap to nearby points on the board edge."],
     guideSquareHint: ["Aloita kulmasta ja vedä neliöohjuri haluamaasi kokoon.", "Start at a corner and drag to size the square guide."],
     guideCircleHint: ["Vedä ympyräohjurin keskipisteestä kehälle.", "Drag from the center of the circle guide to its edge."],
     guideEraseHint: ["Poista oma ohjuri napsauttamalla sen viivaa.", "Click a custom guide’s outline to remove it."],

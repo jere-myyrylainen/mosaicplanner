@@ -53,6 +53,43 @@
     ) <= radius + EPSILON;
   }
 
+  function boardGuideAnchors(board) {
+    const { width, height } = board;
+    const radius = board.shape === 'circle' ? width / 2 : board.shape === 'rounded' ? board.radius : 0;
+    const anchors = [];
+
+    function addSide(span, depth, pointAt) {
+      function addMark(distance) {
+        const offset = distance - span / 2;
+        const corner = Math.max(0, Math.abs(offset) - (span / 2 - radius));
+        const edge = depth / 2 - radius + Math.sqrt(Math.max(0, radius ** 2 - corner ** 2));
+        anchors.push(pointAt(offset, edge));
+      }
+
+      for (let distance = 0; distance < span; distance += 10) addMark(distance);
+      addMark(span);
+    }
+
+    addSide(width, height, (x, edge) => ({ x, y: -edge }));
+    addSide(width, height, (x, edge) => ({ x, y: edge }));
+    addSide(height, width, (y, edge) => ({ x: -edge, y }));
+    addSide(height, width, (y, edge) => ({ x: edge, y }));
+    return anchors;
+  }
+
+  function nearestGuideAnchor(anchors, point, limit) {
+    let bestDistance = limit ** 2;
+    let nearest;
+    for (const anchor of anchors) {
+      const distance = (anchor.x - point.x) ** 2 + (anchor.y - point.y) ** 2;
+      if (distance <= bestDistance) {
+        nearest = anchor;
+        bestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
   function pieceGeometry(tile, piece) {
     const halfWidth = tile.width / 2;
     const halfHeight = tile.height / 2;
@@ -744,8 +781,8 @@
 
   const model = {
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
-    REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, colorFamilies, demoProject,
-    fitsBoard, guideFromDrag, lineSpacing, nearestGuide, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
+    REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
+    fitsBoard, guideFromDrag, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
     referenceWidthLimit, sampleOutline, sampleSegment, snapToGuide, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions
   };

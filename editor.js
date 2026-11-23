@@ -4,7 +4,7 @@
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
   const I18n = window.MosaicI18n;
-  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, paintReference } = window.MosaicBoard;
+  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintReference } = window.MosaicBoard;
   const t = I18n.text;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
@@ -26,6 +26,7 @@
     grout: byId('grout-layer'),
     pieces: byId('piece-layer'),
     guides: byId('guide-layer'),
+    rulers: byId('ruler-layer'),
     preview: byId('preview-layer'),
     selection: byId('selection-layer')
   };
@@ -76,6 +77,7 @@
   let feedbackValues;
   let zoom = 1;
   let snapDistance = 0;
+  let rulerView;
   let viewCenter = { x: 0, y: 0 };
   let idSequence = 0;
 
@@ -724,15 +726,25 @@
   function renderView() {
     const { board } = project;
     const screenWidth = stage.clientWidth;
-    const aspect = screenWidth / Math.max(1, stage.clientHeight);
-    if (!aspect) return;
+    const screenHeight = stage.clientHeight;
+    if (!screenWidth || !screenHeight) return;
+    const rulerGutter = 52;
+    const fitWidth = Math.max(screenWidth - 2 * rulerGutter, screenWidth / 2);
+    const fitHeight = Math.max(screenHeight - 2 * rulerGutter, screenHeight / 2);
     const margin = Math.max(board.width, board.height) * .12;
-    const width = Math.max(board.width + margin, (board.height + margin) * aspect) / zoom;
-    const height = width / aspect;
-    snapDistance = SNAP_PIXELS * width / screenWidth;
+    const unitsPerPixel = Math.max((board.width + margin) / fitWidth, (board.height + margin) / fitHeight) / zoom;
+    const width = screenWidth * unitsPerPixel;
+    const height = screenHeight * unitsPerPixel;
+    snapDistance = SNAP_PIXELS * unitsPerPixel;
     canvas.setAttribute('viewBox', [
       viewCenter.x - width / 2, viewCenter.y - height / 2, width, height
     ].join(' '));
+    const language = document.documentElement.lang;
+    if (rulerView?.board !== board || rulerView.unitsPerPixel !== unitsPerPixel || rulerView.language !== language) {
+      const anchors = rulerView?.board === board ? rulerView.anchors : Model.boardGuideAnchors(board);
+      renderBoardRulers(layers.rulers, board, anchors, unitsPerPixel, I18n.number);
+      rulerView = { board, anchors, unitsPerPixel, language };
+    }
     byId('zoom-level').textContent = I18n.percent(zoom);
     byId('zoom-in').disabled = zoom >= 12;
     byId('zoom-out').disabled = zoom <= .25;
@@ -1005,6 +1017,17 @@
     return point.matrixTransform(matrix.inverse());
   }
 
+  function guideAnchorAt(point) {
+    return rulerView && Model.nearestGuideAnchor(rulerView.anchors, point, snapDistance);
+  }
+
+  function markGuideAnchor(anchor) {
+    if (!anchor) return;
+    layers.preview.append(svgElement('circle', {
+      cx: anchor.x, cy: anchor.y, r: 4.5 * rulerView.unitsPerPixel, class: 'active-guide-anchor'
+    }));
+  }
+
   function snappedGeometry(piece, index = placementIndex, accepts = candidate => index.accepts(candidate)) {
     const guide = Model.snapToGuide(project, piece, snapDistance);
     const guided = index.geometry({ ...piece, x: guide.x, y: guide.y });
@@ -1157,7 +1180,10 @@
     } else if (tool === 'reference') {
       gesture = { kind: 'reference', origin: point, reference: selectedReference() };
     } else if (guideTools.has(tool)) {
-      gesture = { kind: 'guide', start: point, shape: guideTools.get(tool) };
+      const shape = guideTools.get(tool);
+      const anchor = shape === 'line' ? guideAnchorAt(point) : undefined;
+      gesture = { kind: 'guide', start: anchor || point, anchor, shape };
+      markGuideAnchor(anchor);
     } else if (tool === 'guideErase') {
       const nearest = Model.nearestGuide(project.guides, point, snapDistance);
       if (nearest) {
@@ -1280,9 +1306,12 @@
     } else if (current.kind === 'marquee') {
       updateMarquee(current, point);
     } else if (current.kind === 'guide') {
-      current.guide = Model.guideFromDrag(current.shape, current.start, point);
+      const anchor = current.shape === 'line' ? guideAnchorAt(point) : undefined;
+      current.guide = Model.guideFromDrag(current.shape, current.start, anchor || point);
       layers.preview.replaceChildren();
       if (current.guide) layers.preview.append(guideShape(current.guide, { 'stroke-opacity': .65 }));
+      markGuideAnchor(current.anchor);
+      if (anchor !== current.anchor) markGuideAnchor(anchor);
     } else if (current.kind === 'reference') {
       const limit = Model.REFERENCE_POSITION_LIMIT;
       const { origin, reference } = current;
@@ -1315,7 +1344,10 @@
   function movePointer(event) {
     if (gesture) updateGesture(event);
     else if (tool === 'draw' && !spacePressed) previewDrawHover(event);
-    else if (tool === 'guideErase' && !spacePressed) {
+    else if (tool === 'guideLine' && !spacePressed) {
+      layers.preview.replaceChildren();
+      markGuideAnchor(guideAnchorAt(surfacePoint(event)));
+    } else if (tool === 'guideErase' && !spacePressed) {
       const nearest = Model.nearestGuide(project.guides, surfacePoint(event), snapDistance);
       layers.preview.replaceChildren();
       if (nearest) layers.preview.append(guideShape(project.guides[nearest.index], { stroke: '#a34032' }));

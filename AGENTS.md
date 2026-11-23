@@ -17,6 +17,10 @@ Mosaic Planner is an offline mosaic editor written in plain JavaScript, HTML, CS
 - Commit each completed editor action through `commit(next)`. Create new snapshots and copy modified collections or objects so undo, redo, and autosave see consistent project state.
 - Supply Finnish and English for new interface text, including accessible names and feedback. Keep user-supplied names and tags independent of the interface language.
 
+## Publish changes
+
+- After verifying a completed change, commit the task's changes and push them directly to the GitHub `main` branch with `git push origin main`. Confirm the push succeeded before reporting completion.
+
 ## Feature guides
 
 | Area | Guide |

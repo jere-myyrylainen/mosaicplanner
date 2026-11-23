@@ -90,6 +90,64 @@
     }
   }
 
+  function renderBoardRulers(layer, board, anchors, unitsPerPixel, format) {
+    const fragment = document.createDocumentFragment();
+    const left = -board.width / 2;
+    const top = -board.height / 2;
+    const rulerX = left - 8 * unitsPerPixel;
+    const rulerY = top - 8 * unitsPerPixel;
+
+    function addRuler(span, horizontal) {
+      const start = horizontal ? left : top;
+      const step = span / 10;
+      const spacing = step / unitsPerPixel;
+      const labels = Array.from({ length: 11 }, (_, index) => format(span * index / 10));
+      const labelWidth = Math.max(...labels.map(label => label.length)) * 7;
+      const rotate = horizontal && spacing < labelWidth + 4;
+      const every = Math.ceil((horizontal && !rotate ? labelWidth + 4 : 12) / spacing);
+      const rail = svgElement('g', { class: 'board-ruler' });
+      rail.appendChild(svgElement('line', horizontal ?
+        { x1: left, x2: -left, y1: rulerY, y2: rulerY } :
+        { x1: rulerX, x2: rulerX, y1: top, y2: -top }));
+
+      labels.forEach((label, index) => {
+        const coordinate = index === 10 ? start + span : start + step * index;
+        const x = horizontal ? coordinate : rulerX;
+        const y = horizontal ? rulerY : coordinate;
+        const tick = svgElement('g', { transform: 'translate(' + x + ' ' + y + ') scale(' + unitsPerPixel + ')' });
+        tick.appendChild(svgElement('line', horizontal ? { y2: 4 } : { x2: 4 }));
+        if (index === 10 || (index % every === 0 && index + every <= 10)) {
+          const attributes = horizontal ? { y: -5, 'text-anchor': 'middle' } : { x: -5, y: 3.5, 'text-anchor': 'end' };
+          const text = svgElement('text', rotate ? { transform: 'translate(3.5 -5) rotate(-90)' } : attributes);
+          text.textContent = label;
+          tick.appendChild(text);
+        }
+        rail.appendChild(tick);
+      });
+      fragment.appendChild(rail);
+    }
+
+    addRuler(board.width, true);
+    addRuler(board.height, false);
+    const unit = svgElement('text', {
+      class: 'board-ruler', x: left - 14 * unitsPerPixel, y: rulerY - 5 * unitsPerPixel,
+      'font-size': 11 * unitsPerPixel, 'text-anchor': 'end'
+    });
+    unit.textContent = 'mm';
+    fragment.appendChild(unit);
+
+    const marks = [];
+    let lastMark;
+    for (const { x, y } of anchors) {
+      if (lastMark && Math.hypot(x - lastMark.x, y - lastMark.y) < 6 * unitsPerPixel) continue;
+      marks.push('M' + x + ' ' + y + 'h0');
+      lastMark = { x, y };
+    }
+    fragment.appendChild(svgElement('path', { class: 'guide-anchors', d: marks.join('') }));
+    layer.textContent = '';
+    layer.appendChild(fragment);
+  }
+
   function paintReference(element, reference) {
     const height = reference.width * reference.pixelHeight / reference.pixelWidth;
     element.setAttribute('x', reference.x - reference.width / 2);
@@ -100,5 +158,5 @@
     element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
   }
 
-  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, paintReference };
+  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintReference };
 }());
