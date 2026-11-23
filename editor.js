@@ -1029,13 +1029,7 @@
   }
 
   function snappedGeometry(piece, index = placementIndex, accepts = candidate => index.accepts(candidate)) {
-    const guide = Model.snapToGuide(project, piece, snapDistance);
-    const guided = index.geometry({ ...piece, x: guide.x, y: guide.y });
-    if (!project.grid.snapTiles) return guided;
-    const distance = guide !== piece && accepts(guided) ?
-      Math.hypot(guide.x - piece.x, guide.y - piece.y) : snapDistance;
-    const original = guide === piece ? guided : index.geometry(piece);
-    return index.snapToTiles(original, distance, accepts) || guided;
+    return index.snapPlacement(project, piece, snapDistance, accepts);
   }
 
   function pieceAt(center, tile, angle) {
