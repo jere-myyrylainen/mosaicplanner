@@ -334,10 +334,10 @@
     }
   }
 
-  function* guideCrossings({ custom, lattice }) {
+  function* guideCrossings({ custom, lattice }, cross = contactCrossings) {
     const earlier = lattice.slice();
     for (const parts of custom) {
-      yield* contactCrossings(parts, earlier);
+      yield* cross(parts, earlier);
       earlier.push(...parts);
     }
   }
@@ -523,6 +523,11 @@
     }
   }
 
+  function tileReach(geometry) {
+    const { piece, points, radius } = geometry;
+    return radius || Math.max(...points.map(vertex => Math.hypot(vertex.x - piece.x, vertex.y - piece.y)));
+  }
+
   function nearbyGuideContacts({ board, grid, guides, seam }, geometry, limit) {
     const custom = [];
     const lattice = [];
@@ -546,7 +551,7 @@
       }
     }
     if (grid.guidesVisible) {
-      const reach = geometry.radius || Math.max(...geometry.points.map(vertex => Math.hypot(vertex.x - piece.x, vertex.y - piece.y)));
+      const reach = tileReach(geometry);
       for (const guide of guides) {
         const projected = projectOntoGuide(piece, guide);
         if (Math.hypot(projected.x - piece.x, projected.y - piece.y) > reach + halfSeam + limit + EPSILON) continue;
@@ -561,6 +566,50 @@
       }
     }
     return { custom, lattice };
+  }
+
+  function* pointedGuideCrossings({ board, grid, guides, seam }, geometry, limit, reach) {
+    const { piece } = geometry;
+    const custom = [];
+    const lattice = [];
+    for (const guide of guides) {
+      const parts = guideParts(guide).filter(part => {
+        const projected = projectOntoGuide(piece, part);
+        return Math.hypot(projected.x - piece.x, projected.y - piece.y) <= limit + EPSILON;
+      });
+      if (parts.length) custom.push(parts);
+    }
+    if (!custom.length) return;
+
+    if (grid.visible) {
+      const origin = gridOrigin(grid);
+      const halfWidth = board.width / 2;
+      const halfHeight = board.height / 2;
+      const x = gridLine(piece.x, grid.size, halfWidth, origin.x);
+      const y = gridLine(piece.y, grid.size, halfHeight, origin.y);
+      if (Math.abs(x - piece.x) <= limit) lattice.push(linePart(x, -halfHeight, x, halfHeight));
+      if (Math.abs(y - piece.y) <= limit) lattice.push(linePart(-halfWidth, y, halfWidth, y));
+    }
+
+    function* nearCrossings(parts, earlier) {
+      for (const part of parts) {
+        for (const other of earlier) {
+          const gridLineTarget = lattice.includes(other);
+          const crossings = [...intersections(part, other)].filter(point =>
+            Math.hypot(point.x - piece.x, point.y - piece.y) <= Math.SQRT2 * limit &&
+            (!gridLineTarget || pointInBoard(board, point)));
+          if (!crossings.length) continue;
+          const first = [...guideContactParts(geometry, part, seam / 2)];
+          const second = [...guideContactParts(geometry, other, seam / 2)];
+          for (const point of contactCrossings(first, second)) {
+            if (crossings.some(crossing => Math.hypot(point.x - crossing.x, point.y - crossing.y) <= reach)) {
+              yield point;
+            }
+          }
+        }
+      }
+    }
+    yield* guideCrossings({ custom, lattice }, nearCrossings);
   }
 
   function* contactProjections(parts, origin) {
@@ -679,11 +728,21 @@
 
       const guides = grid.snap ? nearbyGuideContacts(project, original, limit) : { custom: [], lattice: [] };
       const parts = guides.lattice.concat(...guides.custom);
-      const crossing = this.closestPlacement(piece, limit, guideCrossings(guides), accepts);
+      // Each guide must be within the snap tolerance. Two corrections can add up diagonally.
+      const crossing = this.closestPlacement(piece, Math.SQRT2 * limit, guideCrossings(guides), accepts);
       const tiles = grid.snapTiles ? this.nearbyTileContacts(original, limit) : [];
-      const crossingRange = crossing ? Math.hypot(crossing.piece.x - piece.x, crossing.piece.y - piece.y) : limit;
+      const crossingRange = crossing ? Math.min(limit, Math.hypot(crossing.piece.x - piece.x, crossing.piece.y - piece.y)) : limit;
       const contact = this.closestPlacement(piece, crossingRange, tileCrossings(tiles, parts, piece), accepts);
-      if (contact || crossing) return contact || crossing;
+      if (crossing) return contact || crossing;
+
+      if (grid.snap && grid.guidesVisible && project.guides.length) {
+        // Aiming at the visible crossing places the edge of the tile beside it.
+        const reach = Math.SQRT2 * (tileReach(original) + project.seam / 2);
+        const points = pointedGuideCrossings(project, original, limit, reach);
+        const pointed = this.closestPlacement(piece, reach + Math.SQRT2 * limit, points, accepts);
+        if (pointed) return pointed;
+      }
+      if (contact) return contact;
 
       const guided = this.closestPlacement(piece, limit, contactProjections(parts, piece), accepts);
       const range = guided ? Math.hypot(guided.piece.x - piece.x, guided.piece.y - piece.y) : limit;
