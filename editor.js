@@ -1051,7 +1051,7 @@
     if (pieces.length >= action.limit) notify(pieces.length === 1 ? 'addedOneTile' : 'addedManyTiles', { count: pieces.length });
   }
 
-  function previewPieces(pieces, tile, path) {
+  function previewPieces(pieces, tile, { path, blocked } = {}) {
     const fragment = document.createDocumentFragment();
     if (path && path.length > 1) {
       fragment.append(svgElement('polyline', {
@@ -1061,13 +1061,24 @@
     for (const piece of pieces.slice(0, 350)) {
       fragment.append(pieceShape(piece, tile, { class: 'preview-piece piece-face', fill: tile.color }));
     }
+    if (blocked) fragment.append(pieceShape(blocked, tile, { class: 'blocked-preview' }));
     layers.preview.replaceChildren(fragment);
   }
 
-  function hoverPlacement(point) {
-    const tile = placementIndex.tileTypes.get(activeTileId);
-    const piece = pieceAt(snap(point), tile, drawAngle);
-    previewPieces(placementIndex.accepts(placementIndex.geometry(piece)) ? [piece] : [], tile);
+  function previewDrawPlacement(point, action) {
+    const tile = action?.tile ?? placementIndex.tileTypes.get(activeTileId);
+    const index = action?.index ?? placementIndex;
+    const piece = pieceAt(snap(point), tile, action?.angle ?? drawAngle);
+    const last = action && action.placed[action.placed.length - 1];
+    const placedHere = last && Math.hypot(piece.x - last.x, piece.y - last.y) < 1e-7;
+    const blocked = !placedHere && !index.accepts(index.geometry(piece));
+    const pieces = action?.placed ?? (blocked ? [] : [piece]);
+    previewPieces(pieces, tile, { blocked: blocked ? piece : undefined });
+  }
+
+  function previewDrawHover(event) {
+    drawHover = { clientX: event.clientX, clientY: event.clientY };
+    previewDrawPlacement(surfacePoint(drawHover));
   }
 
   function fillAt(point, tile) {
@@ -1164,7 +1175,7 @@
       }
       placeCandidate(action, point, true);
       gesture = { kind: 'draw', previous: point, phase: 1, action };
-      previewPieces(action.placed, tile);
+      previewDrawPlacement(point, action);
     } else {
       gesture = { kind: tool, start: snap(point), lastPoint: point, tile };
     }
@@ -1273,22 +1284,19 @@
       for (const center of sample.points) placeCandidate(action, center, true);
       current.previous = point;
       current.phase = sample.limited ? 1 : sample.nextDistance / spacing;
-      previewPieces(action.placed, action.tile);
+      previewDrawPlacement(point, action);
     } else {
       current.lastPoint = point;
       const guide = drawingGuide(current, snap(point));
       const action = placementAction(current.tile, { limit: 350 });
       for (const center of guide.points) placeCandidate(action, center, true);
-      previewPieces(action.placed, current.tile, guide.path);
+      previewPieces(action.placed, current.tile, { path: guide.path });
     }
   }
 
   function movePointer(event) {
     if (gesture) updateGesture(event);
-    else if (tool === 'draw' && !spacePressed) {
-      drawHover = { clientX: event.clientX, clientY: event.clientY };
-      hoverPlacement(surfacePoint(drawHover));
-    }
+    else if (tool === 'draw' && !spacePressed) previewDrawHover(event);
   }
 
   function endPointer(event) {
@@ -1324,7 +1332,10 @@
     if (event.type !== 'pointerup' || current.kind === 'pan') return;
     if (current.kind === 'draw') {
       if (current.action.placed.length) finishPlacement(current.action);
-      else notify('tilePlacementBlocked');
+      else {
+        notify('tilePlacementBlocked');
+        if (event.pointerType !== 'touch') previewDrawHover(event);
+      }
       return;
     }
     const guide = drawingGuide(current, snap(current.lastPoint));
@@ -1506,7 +1517,7 @@
   function changeDrawAngle(angle) {
     if (gesture || !Number.isFinite(angle)) return;
     drawAngle = (Math.round(Model.angleInDegrees(angle) * 10) % 3600) / 10;
-    if (tool === 'draw' && drawHover && !spacePressed) hoverPlacement(surfacePoint(drawHover));
+    if (tool === 'draw' && drawHover && !spacePressed) previewDrawPlacement(surfacePoint(drawHover));
   }
 
   function rotateByStep() {
