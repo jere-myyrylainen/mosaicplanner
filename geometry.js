@@ -342,6 +342,22 @@
     }
   }
 
+  function* alignedGuideCrossings({ board, grid }, guides, piece, limit) {
+    yield* guideCrossings(guides);
+
+    // Keep room to slide along a single line even when the grid is dense.
+    const range = Math.min(limit, grid.size / 4);
+    for (const vertical of guides.lattice) {
+      if (vertical.gridX === undefined || Math.abs(vertical.x - piece.x) > range) continue;
+      for (const horizontal of guides.lattice) {
+        if (horizontal.gridY === undefined || Math.abs(horizontal.y - piece.y) > range) continue;
+        if (pointInBoard(board, { x: vertical.gridX, y: horizontal.gridY })) {
+          yield { x: vertical.x, y: horizontal.y };
+        }
+      }
+    }
+  }
+
   function* tileCrossings(tiles, guides, origin) {
     for (const tile of tiles) yield* contactCrossings(tile.parts, guides, origin);
 
@@ -541,13 +557,13 @@
         const target = gridLine(edge, grid.size, halfWidth, origin.x);
         if (target === undefined || Math.abs(target - edge) > limit) continue;
         const x = piece.x + (target - edge);
-        lattice.push(linePart(x, -halfHeight, x, halfHeight));
+        lattice.push({ ...linePart(x, -halfHeight, x, halfHeight), gridX: target });
       }
       for (const edge of [minY - halfSeam, maxY + halfSeam]) {
         const target = gridLine(edge, grid.size, halfHeight, origin.y);
         if (target === undefined || Math.abs(target - edge) > limit) continue;
         const y = piece.y + (target - edge);
-        lattice.push(linePart(-halfWidth, y, halfWidth, y));
+        lattice.push({ ...linePart(-halfWidth, y, halfWidth, y), gridY: target });
       }
     }
     if (grid.guidesVisible) {
@@ -569,24 +585,31 @@
   }
 
   function* pointedGuideCrossings({ board, grid, guides, seam }, geometry, limit, reach) {
-    const { piece } = geometry;
+    const { piece, minX, minY, maxX, maxY } = geometry;
+    const halfSeam = seam / 2;
     const custom = [];
     const lattice = [];
-    for (const guide of guides) {
+    for (const guide of grid.guidesVisible ? guides : []) {
       const parts = guideParts(guide).filter(part => {
         const projected = projectOntoGuide(piece, part);
         return Math.hypot(projected.x - piece.x, projected.y - piece.y) <= limit + EPSILON;
       });
       if (parts.length) custom.push(parts);
     }
-    if (!custom.length) return;
-
     if (grid.visible) {
       const origin = gridOrigin(grid);
       const halfWidth = board.width / 2;
       const halfHeight = board.height / 2;
       const x = gridLine(piece.x, grid.size, halfWidth, origin.x);
       const y = gridLine(piece.y, grid.size, halfHeight, origin.y);
+      const range = Math.min(limit, grid.size / 4);
+      if (Math.abs(x - piece.x) <= range && Math.abs(y - piece.y) <= range && pointInBoard(board, { x, y })) {
+        for (const edgeX of [minX - halfSeam, maxX + halfSeam]) {
+          for (const edgeY of [minY - halfSeam, maxY + halfSeam]) {
+            yield { x: x + (piece.x - edgeX), y: y + (piece.y - edgeY) };
+          }
+        }
+      }
       if (Math.abs(x - piece.x) <= limit) lattice.push(linePart(x, -halfHeight, x, halfHeight));
       if (Math.abs(y - piece.y) <= limit) lattice.push(linePart(-halfWidth, y, halfWidth, y));
     }
@@ -599,8 +622,8 @@
             Math.hypot(point.x - piece.x, point.y - piece.y) <= Math.SQRT2 * limit &&
             (!gridLineTarget || pointInBoard(board, point)));
           if (!crossings.length) continue;
-          const first = [...guideContactParts(geometry, part, seam / 2)];
-          const second = [...guideContactParts(geometry, other, seam / 2)];
+          const first = [...guideContactParts(geometry, part, halfSeam)];
+          const second = [...guideContactParts(geometry, other, halfSeam)];
           for (const point of contactCrossings(first, second)) {
             if (crossings.some(crossing => Math.hypot(point.x - crossing.x, point.y - crossing.y) <= reach)) {
               yield point;
@@ -729,13 +752,14 @@
       const guides = grid.snap ? nearbyGuideContacts(project, original, limit) : { custom: [], lattice: [] };
       const parts = guides.lattice.concat(...guides.custom);
       // Each guide must be within the snap tolerance. Two corrections can add up diagonally.
-      const crossing = this.closestPlacement(piece, Math.SQRT2 * limit, guideCrossings(guides), accepts);
+      const crossingPoints = alignedGuideCrossings(project, guides, piece, limit);
+      const crossing = this.closestPlacement(piece, Math.SQRT2 * limit, crossingPoints, accepts);
       const tiles = grid.snapTiles ? this.nearbyTileContacts(original, limit) : [];
       const crossingRange = crossing ? Math.min(limit, Math.hypot(crossing.piece.x - piece.x, crossing.piece.y - piece.y)) : limit;
       const contact = this.closestPlacement(piece, crossingRange, tileCrossings(tiles, parts, piece), accepts);
       if (crossing) return contact || crossing;
 
-      if (grid.snap && grid.guidesVisible && project.guides.length) {
+      if (grid.snap && (grid.visible || (grid.guidesVisible && project.guides.length))) {
         // Aiming at the visible crossing places the edge of the tile beside it.
         const reach = Math.SQRT2 * (tileReach(original) + project.seam / 2);
         const points = pointedGuideCrossings(project, original, limit, reach);
