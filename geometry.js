@@ -311,27 +311,49 @@
     return circleIntersections(first, second);
   }
 
-  function* sharedContactPoints(part, guide, origin, contact) {
+  function* sharedContactPoints(part, other, origin, contact) {
     // Coincident edges or arcs have a continuous set of shared positions.
-    const guided = projectOntoGuide(origin, guide);
-    const onGuide = projectOntoGuide(contact, guide);
-    const onContact = projectOntoGuide(guided, part);
-    if (Math.hypot(contact.x - onGuide.x, contact.y - onGuide.y) <= EPSILON) yield contact;
-    if (Math.hypot(guided.x - onContact.x, guided.y - onContact.y) <= EPSILON) yield guided;
-    yield* intersections(part, guide);
+    const projected = projectOntoGuide(origin, other);
+    const onOther = projectOntoGuide(contact, other);
+    const onPart = projectOntoGuide(projected, part);
+    if (Math.hypot(contact.x - onOther.x, contact.y - onOther.y) <= EPSILON) yield contact;
+    if (Math.hypot(projected.x - onPart.x, projected.y - onPart.y) <= EPSILON) yield projected;
+    yield* intersections(part, other);
+  }
+
+  function* contactCrossings(first, second, origin) {
+    if (!second.length) return;
+    for (const part of first) {
+      const projected = origin && projectOntoGuide(origin, part);
+      for (const other of second) {
+        const points = origin ? sharedContactPoints(part, other, origin, projected) : intersections(part, other);
+        for (const point of points) {
+          if (onContactPart(part, point) && onContactPart(other, point)) yield point;
+        }
+      }
+    }
   }
 
   function* guideCrossings({ custom, lattice }) {
     const earlier = lattice.slice();
     for (const parts of custom) {
-      for (const part of parts) {
-        for (const other of earlier) {
-          for (const point of intersections(part, other)) {
-            if (onContactPart(part, point) && onContactPart(other, point)) yield point;
-          }
-        }
-      }
+      yield* contactCrossings(parts, earlier);
       earlier.push(...parts);
+    }
+  }
+
+  function* tileCrossings(tiles, guides, origin) {
+    for (const tile of tiles) yield* contactCrossings(tile.parts, guides, origin);
+
+    // Check each pair of distinct neighbors whose contact bounds overlap.
+    const sorted = tiles.slice().sort((a, b) => a.minX - b.minX);
+    for (let i = 0; i < sorted.length; i++) {
+      const first = sorted[i];
+      for (let j = i + 1; j < sorted.length && sorted[j].minX <= first.maxX + EPSILON; j++) {
+        const second = sorted[j];
+        if (first.maxY + EPSILON < second.minY || second.maxY + EPSILON < first.minY) continue;
+        yield* contactCrossings(first.parts, second.parts, origin);
+      }
     }
   }
 
@@ -541,7 +563,7 @@
     return { custom, lattice };
   }
 
-  function* guideProjections(parts, origin) {
+  function* contactProjections(parts, origin) {
     for (const part of parts) {
       const point = projectOntoGuide(origin, part);
       if (onContactPart(part, point)) yield point;
@@ -625,51 +647,48 @@
       return nearest;
     }
 
-    *tileSnapPoints(geometry, limit, guides) {
+    nearbyTileContacts(geometry, limit) {
+      const { piece, minX, minY, maxX, maxY } = geometry;
+      const tiles = [];
       const margin = this.gap + limit;
       for (const other of this.nearby(geometry, margin)) {
-        if (geometry.maxX + margin < other.minX || other.maxX + margin < geometry.minX ||
-            geometry.maxY + margin < other.minY || other.maxY + margin < geometry.minY) continue;
+        if (maxX + margin < other.minX || other.maxX + margin < minX ||
+            maxY + margin < other.minY || other.maxY + margin < minY) continue;
+        const parts = [];
         for (const part of tileContactParts(geometry, other, this.gap)) {
-          const projected = projectOntoGuide(geometry.piece, part);
-          if (Math.hypot(projected.x - geometry.piece.x, projected.y - geometry.piece.y) > limit + EPSILON) continue;
-          if (!guides) {
-            if (onContactPart(part, projected)) yield projected;
-            continue;
-          }
-          for (const guide of guides) {
-            for (const point of sharedContactPoints(part, guide, geometry.piece, projected)) {
-              if (onContactPart(part, point) && onContactPart(guide, point)) yield point;
-            }
-          }
+          const projected = projectOntoGuide(piece, part);
+          if (Math.hypot(projected.x - piece.x, projected.y - piece.y) <= limit + EPSILON) parts.push(part);
+        }
+        if (parts.length) {
+          tiles.push({
+            parts,
+            minX: other.minX - (maxX - piece.x) - this.gap,
+            maxX: other.maxX + (piece.x - minX) + this.gap,
+            minY: other.minY - (maxY - piece.y) - this.gap,
+            maxY: other.maxY + (piece.y - minY) + this.gap
+          });
         }
       }
-    }
-
-    snapToTiles(geometry, limit, accepts = candidate => this.accepts(candidate)) {
-      return this.closestPlacement(geometry.piece, limit, this.tileSnapPoints(geometry, limit), accepts);
+      return tiles;
     }
 
     snapPlacement(project, piece, limit, accepts = candidate => this.accepts(candidate)) {
       const original = this.geometry(piece);
       const { grid } = project;
-      let guided;
-      if (grid.snap) {
-        const guides = nearbyGuideContacts(project, original, limit);
-        const crossing = this.closestPlacement(piece, limit, guideCrossings(guides), accepts);
-        const parts = guides.lattice.concat(...guides.custom);
-        if (grid.snapTiles && parts.length) {
-          const range = crossing ? Math.hypot(crossing.piece.x - piece.x, crossing.piece.y - piece.y) : limit;
-          const contact = this.closestPlacement(piece, range, this.tileSnapPoints(original, range, parts), accepts);
-          if (contact) return contact;
-        }
-        if (crossing) return crossing;
-        guided = this.closestPlacement(piece, limit, guideProjections(parts, piece), accepts);
-      }
+      if (!grid.snap && !grid.snapTiles) return original;
 
-      if (!grid.snapTiles) return guided || original;
+      const guides = grid.snap ? nearbyGuideContacts(project, original, limit) : { custom: [], lattice: [] };
+      const parts = guides.lattice.concat(...guides.custom);
+      const crossing = this.closestPlacement(piece, limit, guideCrossings(guides), accepts);
+      const tiles = grid.snapTiles ? this.nearbyTileContacts(original, limit) : [];
+      const crossingRange = crossing ? Math.hypot(crossing.piece.x - piece.x, crossing.piece.y - piece.y) : limit;
+      const contact = this.closestPlacement(piece, crossingRange, tileCrossings(tiles, parts, piece), accepts);
+      if (contact || crossing) return contact || crossing;
+
+      const guided = this.closestPlacement(piece, limit, contactProjections(parts, piece), accepts);
       const range = guided ? Math.hypot(guided.piece.x - piece.x, guided.piece.y - piece.y) : limit;
-      return this.snapToTiles(original, range, accepts) || guided || original;
+      const tileParts = [].concat(...tiles.map(tile => tile.parts));
+      return this.closestPlacement(piece, range, contactProjections(tileParts, piece), accepts) || guided || original;
     }
 
     *piecesAlong(start, end) {
