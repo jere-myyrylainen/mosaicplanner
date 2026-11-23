@@ -465,24 +465,26 @@
     return true;
   }
 
-  function* guideContactParts(geometry, guide) {
+  function* guideContactParts(geometry, guide, halfSeam) {
     if (guide.shape === 'line') {
-      yield* tileContactParts(geometry, { points: [guide, { x: guide.endX, y: guide.endY }] }, 0);
+      yield* tileContactParts(geometry, { points: [guide, { x: guide.endX, y: guide.endY }] }, halfSeam);
       return;
     }
-    yield* tileContactParts(geometry, { piece: guide, radius: guide.radius }, 0);
+    yield* tileContactParts(geometry, { piece: guide, radius: guide.radius }, halfSeam);
 
+    const innerRadius = guide.radius - halfSeam;
+    if (innerRadius < 0) return;
     if (geometry.radius) {
-      const radius = guide.radius - geometry.radius;
+      const radius = innerRadius - geometry.radius;
       if (radius >= 0) yield { ...guide, radius };
       return;
     }
 
-    // A polygon fits inside the circle when each translated vertex fits.
-    // Each vertex limits the tile center to a disk. Their common boundary touches the guide.
+    // Each vertex must fit inside the circle reduced by half the grout width.
+    // A point on the common boundary of the disks places the grout against the guide.
     const center = geometry.piece;
     const disks = geometry.points.map(vertex => ({
-      shape: 'circle', x: guide.x + (center.x - vertex.x), y: guide.y + (center.y - vertex.y), radius: guide.radius
+      shape: 'circle', x: guide.x + (center.x - vertex.x), y: guide.y + (center.y - vertex.y), radius: innerRadius
     }));
     for (let i = 0; i < disks.length; i++) {
       const part = { ...disks[i], inside: disks };
@@ -495,20 +497,21 @@
     }
   }
 
-  function nearbyGuideContacts({ board, grid, guides }, geometry, limit) {
+  function nearbyGuideContacts({ board, grid, guides, seam }, geometry, limit) {
     const custom = [];
     const lattice = [];
+    const halfSeam = seam / 2;
     const { piece, minX, minY, maxX, maxY } = geometry;
     if (grid.visible) {
       const halfWidth = board.width / 2;
       const halfHeight = board.height / 2;
-      for (const edge of [minX, maxX]) {
+      for (const edge of [minX - halfSeam, maxX + halfSeam]) {
         const target = gridLine(edge, grid.size, halfWidth);
         if (target === undefined || Math.abs(target - edge) > limit) continue;
         const x = piece.x + (target - edge);
         lattice.push(linePart(x, -halfHeight, x, halfHeight));
       }
-      for (const edge of [minY, maxY]) {
+      for (const edge of [minY - halfSeam, maxY + halfSeam]) {
         const target = gridLine(edge, grid.size, halfHeight);
         if (target === undefined || Math.abs(target - edge) > limit) continue;
         const y = piece.y + (target - edge);
@@ -519,10 +522,10 @@
       const reach = geometry.radius || Math.max(...geometry.points.map(vertex => Math.hypot(vertex.x - piece.x, vertex.y - piece.y)));
       for (const guide of guides) {
         const projected = projectOntoGuide(piece, guide);
-        if (Math.hypot(projected.x - piece.x, projected.y - piece.y) > reach + limit + EPSILON) continue;
+        if (Math.hypot(projected.x - piece.x, projected.y - piece.y) > reach + halfSeam + limit + EPSILON) continue;
         const contacts = [];
         for (const part of guideParts(guide)) {
-          for (const contact of guideContactParts(geometry, part)) {
+          for (const contact of guideContactParts(geometry, part, halfSeam)) {
             const target = projectOntoGuide(piece, contact);
             if (Math.hypot(target.x - piece.x, target.y - piece.y) <= limit + EPSILON) contacts.push(contact);
           }
