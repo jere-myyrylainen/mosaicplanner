@@ -25,7 +25,7 @@
     const transform = 'translate(' + piece.x + ' ' + piece.y + ') rotate(' + piece.angle + ')';
     const props = { transform, ...attributes };
     if (tile.shape === 'circle') return svgElement('circle', { r: halfWidth, ...props });
-    if (tile.shape === 'triangle') return svgElement('polygon', {
+    if (tile.shape === 'triangle' || tile.shape === 'equilateral') return svgElement('polygon', {
       points: '0,' + -halfHeight + ' ' + halfWidth + ',' + halfHeight + ' ' + -halfWidth + ',' + halfHeight,
       ...props
     });

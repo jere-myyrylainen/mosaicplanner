@@ -549,10 +549,12 @@
 
   function tileSizeText(tile) {
     if (tile.shape === 'circle') return 'Ø ' + I18n.number(tile.width) + ' mm';
+    if (tile.shape === 'equilateral') return '△ ' + I18n.number(tile.width) + ' mm';
     return I18n.number(tile.width) + ' × ' + I18n.number(tile.height) + ' mm';
   }
 
   function tileSizeKey(tile) {
+    if (tile.shape === 'equilateral') return 'side/' + tile.width;
     const dimensions = tile.shape === 'circle' ? 'diameter' : 'sides';
     return dimensions + '/' + tile.width + '/' + tile.height;
   }
@@ -953,10 +955,16 @@
   }
 
   function updateTileShape() {
-    const circle = byId('tile-shape').value === 'circle';
-    byId('tile-width-label').textContent = t(circle ? 'diameter' : 'width');
-    byId('tile-height-field').hidden = circle;
-    byId('tile-height').disabled = circle;
+    const shape = byId('tile-shape').value;
+    const singleDimension = shape === 'circle' || shape === 'equilateral';
+    const widthLabel = byId('tile-width-label');
+    const sideLabel = byId('tile-side-label');
+    widthLabel.textContent = t(shape === 'circle' ? 'diameter' : 'width');
+    widthLabel.hidden = Boolean(sideLabel && shape === 'equilateral');
+    if (sideLabel) sideLabel.hidden = shape !== 'equilateral';
+    byId('tile-width').step = shape === 'equilateral' ? 'any' : '0.1';
+    byId('tile-height-field').hidden = singleDimension;
+    byId('tile-height').disabled = singleDimension;
   }
 
   function openTileDialog(tile) {
@@ -983,7 +991,9 @@
     const shape = byId('tile-shape').value;
     const color = byId('tile-color').value;
     const width = byId('tile-width').valueAsNumber;
-    const height = shape === 'circle' ? width : byId('tile-height').valueAsNumber;
+    let height = byId('tile-height').valueAsNumber;
+    if (shape === 'circle') height = width;
+    else if (shape === 'equilateral') height = Model.triangleHeight(width);
     const error = byId('tile-error');
 
     if (!name) {

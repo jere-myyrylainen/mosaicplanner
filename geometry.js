@@ -15,10 +15,14 @@
   const TAU = 2 * Math.PI;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
   const boardShapes = ['rectangle', 'circle', 'rounded'];
-  const tileShapes = ['rectangle', 'circle', 'triangle'];
+  const tileShapes = ['rectangle', 'circle', 'triangle', 'equilateral'];
 
   function angleInDegrees(angle) {
     return ((angle % 360) + 360) % 360;
+  }
+
+  function triangleHeight(side) {
+    return side * Math.sqrt(3) / 2;
   }
 
   function pointInBoard(board, point) {
@@ -48,7 +52,7 @@
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     let vertices;
-    if (tile.shape === 'triangle') {
+    if (tile.shape === 'triangle' || tile.shape === 'equilateral') {
       vertices = [{ x: 0, y: -halfHeight }, { x: halfWidth, y: halfHeight }, { x: -halfWidth, y: halfHeight }];
     } else {
       vertices = [
@@ -494,9 +498,12 @@
     for (const tile of tiles) {
       if (!tile || !validText(tile.id, 100) || tileTypes.has(tile.id) || !validText(tile.name, 60) ||
           !tileShapes.includes(tile.shape) || !validColor(tile.color) ||
-          !validNumber(tile.width, .5, 10000) || !validNumber(tile.height, .5, 10000) ||
+          !validNumber(tile.width, .5, 10000) ||
+          !validNumber(tile.height, tile.shape === 'equilateral' ? triangleHeight(.5) : .5, 10000) ||
           (tile.archived !== undefined && typeof tile.archived !== 'boolean') ||
           (tile.shape === 'circle' && tile.width !== tile.height)) throw new ValidationError(error);
+      const height = tile.shape === 'equilateral' ? triangleHeight(tile.width) : tile.height;
+      if (Math.abs(height - tile.height) > EPSILON) throw new ValidationError(error);
       let tags;
       try {
         tags = tile.tags === undefined ? [] : normalizeTileTags(tile.tags);
@@ -505,7 +512,7 @@
       }
       tileTypes.set(tile.id, {
         id: tile.id, name: tile.name.trim(), shape: tile.shape, color: tile.color,
-        width: tile.width, height: tile.height, ...(tile.archived ? { archived: true } : {}),
+        width: tile.width, height, ...(tile.archived ? { archived: true } : {}),
         ...(tags.length ? { tags } : {})
       });
     }
@@ -537,7 +544,7 @@
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, PlacementIndex, ValidationError, angleInDegrees, blankProject, colorFamilies, demoProject,
     fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, validNumber, validReferenceDimensions
+    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, triangleHeight, validNumber, validReferenceDimensions
   };
 
   if (typeof module === 'object') module.exports = model;

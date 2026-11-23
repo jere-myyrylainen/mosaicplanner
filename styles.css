@@ -291,6 +291,7 @@ select {
 }
 .tile-swatch.circle { border-radius: 50%; }
 .tile-swatch.triangle { clip-path: polygon(50% 0, 100% 100%, 0 100%); border-radius: 0; }
+.tile-swatch.equilateral { clip-path: polygon(50% 6.7%, 100% 93.3%, 0 93.3%); border-radius: 0; }
 .tile-caption { min-width: 0; display: grid; gap: .11rem; }
 .tile-caption strong { overflow-wrap: anywhere; font-size: .875rem; }
 .tile-caption small { color: var(--muted); font-size: .78rem; }
