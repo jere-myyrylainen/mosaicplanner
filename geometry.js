@@ -222,35 +222,6 @@
     return nearest;
   }
 
-  function gridLine(coordinate, size) {
-    return (Math.round(coordinate / size + .5) - .5) * size;
-  }
-
-  function snapToGuide({ board, grid, guides }, point, distance) {
-    if (!grid.snap) return point;
-    let target = point;
-    if (grid.visible) {
-      const { size } = grid;
-      // Project onto one axis at a time, matching the pattern origin in renderBoard.
-      const x = gridLine(point.x, size);
-      const y = gridLine(point.y, size);
-      const dx = Math.abs(x - point.x);
-      const dy = Math.abs(y - point.y);
-      const vertical = { x, y: point.y };
-      const horizontal = { x: point.x, y };
-      if (dx <= distance && pointInBoard(board, vertical)) {
-        target = vertical;
-        distance = dx;
-      }
-      if ((target === point ? dy <= distance : dy < distance) && pointInBoard(board, horizontal)) {
-        target = horizontal;
-        distance = dy;
-      }
-    }
-    const nearest = grid.guidesVisible && nearestGuide(guides, point, distance);
-    return nearest ? nearest.point : target;
-  }
-
   function sideOfEdge(start, end, point) {
     return (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x);
   }
@@ -268,32 +239,13 @@
       linePart(right, bottom, x, bottom), linePart(x, bottom, x, y)];
   }
 
-  function nearbyGuides({ board, grid, guides }, point, limit) {
-    const custom = [];
-    const lattice = [];
-    if (!grid.snap) return { custom, lattice };
-    if (grid.guidesVisible) {
-      for (const guide of guides) {
-        const parts = guideParts(guide).filter(part => {
-          const projected = projectOntoGuide(point, part);
-          return Math.hypot(projected.x - point.x, projected.y - point.y) <= limit + EPSILON;
-        });
-        if (parts.length) custom.push(parts);
-      }
-    }
-    if (grid.visible) {
-      const halfWidth = board.width / 2;
-      const halfHeight = board.height / 2;
-      const x = gridLine(point.x, grid.size);
-      const y = gridLine(point.y, grid.size);
-      if (Math.abs(x) <= halfWidth && Math.abs(x - point.x) <= limit + EPSILON) {
-        lattice.push(linePart(x, -halfHeight, x, halfHeight));
-      }
-      if (Math.abs(y) <= halfHeight && Math.abs(y - point.y) <= limit + EPSILON) {
-        lattice.push(linePart(-halfWidth, y, halfWidth, y));
-      }
-    }
-    return { custom, lattice };
+  function gridLine(coordinate, size, halfSpan) {
+    // The half-cell offset matches the pattern origin in renderBoard.
+    const first = Math.ceil(.5 - halfSpan / size);
+    const last = Math.floor(.5 + halfSpan / size);
+    if (first > last) return;
+    const index = Math.max(first, Math.min(last, Math.round(coordinate / size + .5)));
+    return (index - .5) * size;
   }
 
   function* segmentIntersections(first, second) {
@@ -369,7 +321,11 @@
     const earlier = lattice.slice();
     for (const parts of custom) {
       for (const part of parts) {
-        for (const other of earlier) yield* intersections(part, other);
+        for (const other of earlier) {
+          for (const point of intersections(part, other)) {
+            if (onContactPart(part, point) && onContactPart(other, point)) yield point;
+          }
+        }
       }
       earlier.push(...parts);
     }
@@ -495,7 +451,10 @@
     }
   }
 
-  function onContactArc(part, point) {
+  function onContactPart(part, point) {
+    if (part.inside) {
+      return part.inside.every(circle => Math.hypot(point.x - circle.x, point.y - circle.y) <= circle.radius + EPSILON);
+    }
     if (!part.previous) return true;
     // The corner arc faces away from both incident edges.
     for (const neighbor of [part.previous, part.next]) {
@@ -504,6 +463,81 @@
       if ((point.x - part.x) * dx + (point.y - part.y) * dy > EPSILON * Math.hypot(dx, dy)) return false;
     }
     return true;
+  }
+
+  function* guideContactParts(geometry, guide) {
+    if (guide.shape === 'line') {
+      yield* tileContactParts(geometry, { points: [guide, { x: guide.endX, y: guide.endY }] }, 0);
+      return;
+    }
+    yield* tileContactParts(geometry, { piece: guide, radius: guide.radius }, 0);
+
+    if (geometry.radius) {
+      const radius = guide.radius - geometry.radius;
+      if (radius >= 0) yield { ...guide, radius };
+      return;
+    }
+
+    // A polygon fits inside the circle when each translated vertex fits.
+    // Each vertex limits the tile center to a disk. Their common boundary touches the guide.
+    const center = geometry.piece;
+    const disks = geometry.points.map(vertex => ({
+      shape: 'circle', x: guide.x + (center.x - vertex.x), y: guide.y + (center.y - vertex.y), radius: guide.radius
+    }));
+    for (let i = 0; i < disks.length; i++) {
+      const part = { ...disks[i], inside: disks };
+      yield part;
+      for (let j = 0; j < i; j++) {
+        for (const point of circleIntersections(part, disks[j])) {
+          if (onContactPart(part, point)) yield { shape: 'circle', ...point, radius: 0 };
+        }
+      }
+    }
+  }
+
+  function nearbyGuideContacts({ board, grid, guides }, geometry, limit) {
+    const custom = [];
+    const lattice = [];
+    const { piece, minX, minY, maxX, maxY } = geometry;
+    if (grid.visible) {
+      const halfWidth = board.width / 2;
+      const halfHeight = board.height / 2;
+      for (const edge of [minX, maxX]) {
+        const target = gridLine(edge, grid.size, halfWidth);
+        if (target === undefined || Math.abs(target - edge) > limit) continue;
+        const x = piece.x + (target - edge);
+        lattice.push(linePart(x, -halfHeight, x, halfHeight));
+      }
+      for (const edge of [minY, maxY]) {
+        const target = gridLine(edge, grid.size, halfHeight);
+        if (target === undefined || Math.abs(target - edge) > limit) continue;
+        const y = piece.y + (target - edge);
+        lattice.push(linePart(-halfWidth, y, halfWidth, y));
+      }
+    }
+    if (grid.guidesVisible) {
+      const reach = geometry.radius || Math.max(...geometry.points.map(vertex => Math.hypot(vertex.x - piece.x, vertex.y - piece.y)));
+      for (const guide of guides) {
+        const projected = projectOntoGuide(piece, guide);
+        if (Math.hypot(projected.x - piece.x, projected.y - piece.y) > reach + limit + EPSILON) continue;
+        const contacts = [];
+        for (const part of guideParts(guide)) {
+          for (const contact of guideContactParts(geometry, part)) {
+            const target = projectOntoGuide(piece, contact);
+            if (Math.hypot(target.x - piece.x, target.y - piece.y) <= limit + EPSILON) contacts.push(contact);
+          }
+        }
+        if (contacts.length) custom.push(contacts);
+      }
+    }
+    return { custom, lattice };
+  }
+
+  function* guideProjections(parts, origin) {
+    for (const part of parts) {
+      const point = projectOntoGuide(origin, part);
+      if (onContactPart(part, point)) yield point;
+    }
   }
 
   function cellsInBounds(geometry, margin = 0) {
@@ -592,12 +626,12 @@
           const projected = projectOntoGuide(geometry.piece, part);
           if (Math.hypot(projected.x - geometry.piece.x, projected.y - geometry.piece.y) > limit + EPSILON) continue;
           if (!guides) {
-            if (onContactArc(part, projected)) yield projected;
+            if (onContactPart(part, projected)) yield projected;
             continue;
           }
           for (const guide of guides) {
             for (const point of sharedContactPoints(part, guide, geometry.piece, projected)) {
-              if (onContactArc(part, point)) yield point;
+              if (onContactPart(part, point) && onContactPart(guide, point)) yield point;
             }
           }
         }
@@ -611,8 +645,9 @@
     snapPlacement(project, piece, limit, accepts = candidate => this.accepts(candidate)) {
       const original = this.geometry(piece);
       const { grid } = project;
+      let guided;
       if (grid.snap) {
-        const guides = nearbyGuides(project, piece, limit);
+        const guides = nearbyGuideContacts(project, original, limit);
         const crossing = this.closestPlacement(piece, limit, guideCrossings(guides), accepts);
         const parts = guides.lattice.concat(...guides.custom);
         if (grid.snapTiles && parts.length) {
@@ -621,13 +656,12 @@
           if (contact) return contact;
         }
         if (crossing) return crossing;
+        guided = this.closestPlacement(piece, limit, guideProjections(parts, piece), accepts);
       }
 
-      const point = snapToGuide(project, piece, limit);
-      const guided = point === piece ? original : this.geometry({ ...piece, x: point.x, y: point.y });
-      if (!grid.snapTiles) return guided;
-      const range = point !== piece && accepts(guided) ? Math.hypot(point.x - piece.x, point.y - piece.y) : limit;
-      return this.snapToTiles(original, range, accepts) || guided;
+      if (!grid.snapTiles) return guided || original;
+      const range = guided ? Math.hypot(guided.piece.x - piece.x, guided.piece.y - piece.y) : limit;
+      return this.snapToTiles(original, range, accepts) || guided || original;
     }
 
     *piecesAlong(start, end) {
@@ -954,7 +988,7 @@
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
     fitsBoard, guideFromDrag, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, snapToGuide, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions
   };
 
