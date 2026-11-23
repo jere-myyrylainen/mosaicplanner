@@ -29,7 +29,9 @@
   };
   const newDialog = byId('new-dialog');
   const tileDialog = byId('tile-dialog');
-  const triangleDimension = byId('triangle-dimension');
+  const tileShapeInput = byId('tile-shape');
+  const tileWidthInput = byId('tile-width');
+  const tileHeightInput = byId('tile-height');
   const triangleAngle = byId('tile-apex-angle');
   const drawRotation = byId('draw-rotation');
   const drawAngleInput = byId('draw-angle');
@@ -64,6 +66,7 @@
   let activeTileId;
   let selectedIds = new Set();
   let editingTileId = null;
+  let triangleUsesAngle = false;
   let tool = 'draw';
   let drawAngle = 0;
   let drawHover;
@@ -957,38 +960,41 @@
   }
 
   function updateTileShape() {
-    const shape = byId('tile-shape').value;
-    const triangle = shape === 'triangle' && Boolean(triangleDimension);
-    const useAngle = triangle && triangleDimension.value === 'angle';
-    const hideHeight = shape === 'circle' || shape === 'equilateral' || useAngle;
+    const shape = tileShapeInput.value;
+    const triangle = shape === 'triangle' && Boolean(triangleAngle);
+    const hideHeight = shape === 'circle' || shape === 'equilateral';
     const widthLabel = byId('tile-width-label');
     widthLabel.textContent = t(shape === 'circle' ? 'diameter' : 'width');
     widthLabel.hidden = triangle;
-    if (triangleDimension) {
+    if (triangleAngle) {
       byId('tile-base-label').hidden = !triangle;
-      byId('triangle-dimension-field').hidden = !triangle;
-      triangleDimension.disabled = !triangle;
-      byId('tile-apex-angle-field').hidden = !useAngle;
-      triangleAngle.disabled = !useAngle;
+      byId('tile-apex-angle-field').hidden = !triangle;
+      triangleAngle.disabled = !triangle;
+      triangleAngle.required = false;
     }
-    byId('tile-width').step = triangle || shape === 'equilateral' ? 'any' : '0.1';
+    tileWidthInput.step = triangle || shape === 'equilateral' ? 'any' : '0.1';
     byId('tile-height-field').hidden = hideHeight;
-    const height = byId('tile-height');
-    height.disabled = hideHeight;
-    height.min = triangle ? Model.MIN_TRIANGLE_HEIGHT : .5;
-    height.step = triangle ? 'any' : '0.1';
+    tileHeightInput.disabled = hideHeight;
+    tileHeightInput.required = !hideHeight;
+    tileHeightInput.min = triangle ? Model.MIN_TRIANGLE_HEIGHT : .5;
+    tileHeightInput.step = triangle ? 'any' : '0.1';
+    syncTriangleDimensions();
   }
 
-  function changeTriangleDimension() {
-    const width = byId('tile-width').valueAsNumber;
-    const height = byId('tile-height');
-    const useAngle = triangleDimension.value === 'angle';
-    const value = useAngle ? Model.triangleApexAngle(width, height.valueAsNumber) :
-      Model.triangleHeightFromAngle(width, triangleAngle.valueAsNumber);
-    const destination = useAngle ? triangleAngle : height;
-    destination.value = Number.isFinite(value) ? value : '';
+  function syncTriangleDimensions() {
+    if (!triangleAngle || triangleAngle.disabled) return;
+    const width = tileWidthInput.valueAsNumber;
+    tileHeightInput.required = !triangleUsesAngle;
+    triangleAngle.required = triangleUsesAngle;
+    if (triangleUsesAngle) {
+      const height = Model.triangleHeightFromAngle(width, triangleAngle.valueAsNumber);
+      tileHeightInput.value = Model.validNumber(height, Model.MIN_TRIANGLE_HEIGHT, 10000) ?
+        Number(height.toPrecision(7)) : '';
+    } else {
+      const angle = Model.triangleApexAngle(width, tileHeightInput.valueAsNumber);
+      triangleAngle.value = Number.isFinite(angle) ? Number(angle.toPrecision(7)) : '';
+    }
     byId('tile-error').hidden = true;
-    updateTileShape();
   }
 
   function openTileDialog(tile) {
@@ -1000,14 +1006,12 @@
     byId('tile-dialog-title').textContent = t(tile ? 'editTileType' : 'addTileType');
     byId('tile-name').value = tile ? tile.name : '';
     const equilateral = tile?.shape === 'equilateral';
-    byId('tile-shape').value = triangleDimension && equilateral ? 'triangle' : (tile?.shape || 'rectangle');
+    tileShapeInput.value = triangleAngle && equilateral ? 'triangle' : (tile?.shape || 'rectangle');
     byId('tile-color').value = tile ? tile.color : '#347e73';
-    byId('tile-width').value = tile ? tile.width : 10;
-    byId('tile-height').value = tile ? tile.height : 10;
-    if (triangleDimension) {
-      triangleDimension.value = equilateral ? 'angle' : 'height';
-      triangleAngle.value = equilateral ? 60 : '';
-    }
+    tileWidthInput.value = tile ? tile.width : 10;
+    tileHeightInput.value = tile ? tile.height : 10;
+    triangleUsesAngle = equilateral;
+    if (triangleAngle) triangleAngle.value = equilateral ? 60 : '';
     byId('tile-tags').value = (tile?.tags || []).join(', ');
     byId('tile-error').hidden = true;
     updateTileShape();
@@ -1017,15 +1021,15 @@
   function saveTile(event) {
     event.preventDefault();
     const name = byId('tile-name').value.trim();
-    let shape = byId('tile-shape').value;
+    let shape = tileShapeInput.value;
     const color = byId('tile-color').value;
-    const width = byId('tile-width').valueAsNumber;
+    const width = tileWidthInput.valueAsNumber;
     const error = byId('tile-error');
     const previous = placementIndex.tileTypes.get(editingTileId);
-    let height = byId('tile-height').valueAsNumber;
+    let height = tileHeightInput.valueAsNumber;
     if (shape === 'circle') height = width;
     else if (shape === 'equilateral') height = Model.triangleHeight(width);
-    else if (shape === 'triangle' && triangleDimension?.value === 'angle') {
+    else if (shape === 'triangle' && triangleAngle && triangleUsesAngle) {
       const angle = triangleAngle.valueAsNumber;
       height = previous?.width === width && angle === Model.triangleApexAngle(width, previous.height) ?
         previous.height : Model.triangleHeightFromAngle(width, angle);
@@ -1632,8 +1636,16 @@
   byId('add-tile-text').addEventListener('click', () => openTileDialog());
   byId('close-dialog').addEventListener('click', () => tileDialog.close());
   byId('cancel-tile').addEventListener('click', () => tileDialog.close());
-  byId('tile-shape').addEventListener('change', updateTileShape);
-  triangleDimension?.addEventListener('change', changeTriangleDimension);
+  tileShapeInput.addEventListener('change', updateTileShape);
+  tileWidthInput.addEventListener('input', syncTriangleDimensions);
+  tileHeightInput.addEventListener('input', () => {
+    triangleUsesAngle = false;
+    syncTriangleDimensions();
+  });
+  triangleAngle?.addEventListener('input', () => {
+    triangleUsesAngle = true;
+    syncTriangleDimensions();
+  });
   byId('tile-form').addEventListener('submit', saveTile);
   tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);

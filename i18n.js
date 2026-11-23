@@ -108,7 +108,7 @@
     close: ["Sulje", "Close"],
     name: ["Nimi", "Name"],
     tileNameExample: ["Esim. vihreä lasipala", "e.g. Green glass tile"],
-    triangle: ["Tasakylkinen kolmio", "Isosceles triangle"],
+    triangle: ["Kolmio", "Triangle"],
     equilateral: ["Tasasivuinen kolmio", "Equilateral triangle"],
     sideLength: ["Sivun pituus", "Side length"],
     triangleDimension: ["Kolmion mitoitus", "Dimension by"],

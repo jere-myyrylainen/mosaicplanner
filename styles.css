@@ -105,6 +105,7 @@ legend, .field, .check-field { font-size: .875rem; font-weight: 600; }
 }
 .board-shapes input:focus-visible + span, .toggle input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fields-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: .6rem; }
+.tile-dimensions { grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr)); align-items: end; }
 .field { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
 .number-field, .field > input, select {
   display: flex; align-items: center; min-height: 37px; width: 100%; border: 1px solid var(--line);
