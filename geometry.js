@@ -8,6 +8,7 @@
   const MAX_PROJECT_FILE = 32 * 1024 * 1024;
   const MAX_GUIDES = 500;
   const GUIDE_LIMIT = 50000;
+  const GRID_OFFSET_LIMIT = 50000;
   const MAX_REFERENCES = 8;
   const MAX_REFERENCE_FILE = 12 * 1024 * 1024;
   const MAX_REFERENCE_DATA = 24 * 1024 * 1024;
@@ -239,13 +240,16 @@
       linePart(right, bottom, x, bottom), linePart(x, bottom, x, y)];
   }
 
-  function gridLine(coordinate, size, halfSpan) {
-    // The half-cell offset matches the pattern origin in renderBoard.
-    const first = Math.ceil(.5 - halfSpan / size);
-    const last = Math.floor(.5 + halfSpan / size);
+  function gridOrigin({ size, offsetX = 0, offsetY = 0 }) {
+    return { x: offsetX - size / 2, y: offsetY - size / 2 };
+  }
+
+  function gridLine(coordinate, size, halfSpan, origin) {
+    const first = Math.ceil((-halfSpan - origin) / size);
+    const last = Math.floor((halfSpan - origin) / size);
     if (first > last) return;
-    const index = Math.max(first, Math.min(last, Math.round(coordinate / size + .5)));
-    return (index - .5) * size;
+    const index = Math.max(first, Math.min(last, Math.round((coordinate - origin) / size)));
+    return origin + index * size;
   }
 
   function* segmentIntersections(first, second) {
@@ -503,16 +507,17 @@
     const halfSeam = seam / 2;
     const { piece, minX, minY, maxX, maxY } = geometry;
     if (grid.visible) {
+      const origin = gridOrigin(grid);
       const halfWidth = board.width / 2;
       const halfHeight = board.height / 2;
       for (const edge of [minX - halfSeam, maxX + halfSeam]) {
-        const target = gridLine(edge, grid.size, halfWidth);
+        const target = gridLine(edge, grid.size, halfWidth, origin.x);
         if (target === undefined || Math.abs(target - edge) > limit) continue;
         const x = piece.x + (target - edge);
         lattice.push(linePart(x, -halfHeight, x, halfHeight));
       }
       for (const edge of [minY - halfSeam, maxY + halfSeam]) {
-        const target = gridLine(edge, grid.size, halfHeight);
+        const target = gridLine(edge, grid.size, halfHeight, origin.y);
         if (target === undefined || Math.abs(target - edge) > limit) continue;
         const y = piece.y + (target - edge);
         lattice.push(linePart(-halfWidth, y, halfWidth, y));
@@ -749,7 +754,7 @@
       board: { shape: 'circle', width: 200, height: 200, radius: 18 },
       seam: 2,
       seamColor: DEFAULT_SEAM_COLOR,
-      grid: { visible: true, size: 12, weight: 0.2, snap: false, snapTiles: false, guidesVisible: true },
+      grid: { visible: true, size: 12, weight: 0.2, offsetX: 0, offsetY: 0, snap: false, snapTiles: false, guidesVisible: true },
       guides: [],
       tiles,
       pieces: [],
@@ -926,6 +931,8 @@
         !validNumber(seam, 0, 100) || !validColor(seamColor) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
         !validNumber(grid.weight, .1, 10) ||
+        (grid.offsetX !== undefined && !validNumber(grid.offsetX, -GRID_OFFSET_LIMIT, GRID_OFFSET_LIMIT)) ||
+        (grid.offsetY !== undefined && !validNumber(grid.offsetY, -GRID_OFFSET_LIMIT, GRID_OFFSET_LIMIT)) ||
         (grid.snapTiles !== undefined && typeof grid.snapTiles !== 'boolean') ||
         (grid.guidesVisible !== undefined && typeof grid.guidesVisible !== 'boolean')) throw new ValidationError(error);
     if (!Array.isArray(tiles) || tiles.length > MAX_TYPES ||
@@ -960,8 +967,9 @@
     const restored = blankProject([...tileTypes.values()]);
     restored.name = value.name.trim();
     restored.board = { shape: board.shape, width: board.width, height: board.height, radius: board.radius };
+    const { offsetX = 0, offsetY = 0 } = grid;
     restored.grid = {
-      visible: grid.visible, size: grid.size, weight: grid.weight, snap: grid.snap,
+      visible: grid.visible, size: grid.size, weight: grid.weight, offsetX, offsetY, snap: grid.snap,
       snapTiles: grid.snapTiles === true, guidesVisible: grid.guidesVisible !== false
     };
     for (const guide of guides) {
@@ -988,9 +996,9 @@
   }
 
   const model = {
-    MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
+    MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
-    fitsBoard, guideFromDrag, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
+    fitsBoard, gridOrigin, guideFromDrag, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
     referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions
   };

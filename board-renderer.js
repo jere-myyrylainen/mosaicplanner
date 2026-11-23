@@ -63,13 +63,17 @@
     layer.appendChild(fragment);
   }
 
+  function paintGridPosition(grid, pattern = document.getElementById('grid-pattern')) {
+    const { x, y } = window.MosaicGeometry.gridOrigin(grid);
+    pattern.setAttribute('x', x);
+    pattern.setAttribute('y', y);
+  }
+
   function renderBoard({ board, grid, guides }, layers) {
     const pattern = document.getElementById('grid-pattern');
     const lines = document.getElementById('grid-lines');
     const clip = document.getElementById('board-clip');
-    const offset = -grid.size / 2;
-    pattern.setAttribute('x', offset);
-    pattern.setAttribute('y', offset);
+    paintGridPosition(grid, pattern);
     pattern.setAttribute('width', grid.size);
     pattern.setAttribute('height', grid.size);
     lines.setAttribute('d', 'M0 0V' + grid.size + 'H' + grid.size + 'V0H0Z');
@@ -158,5 +162,5 @@
     element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
   }
 
-  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintReference };
+  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintGridPosition, paintReference };
 }());

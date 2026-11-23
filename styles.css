@@ -151,7 +151,7 @@ select {
 .stage[data-tool="shape"] #canvas, .stage[data-tool="fill"] #canvas,
 .stage[data-tool="erase"] #canvas, .stage[data-tool^="guide"] #canvas { cursor: crosshair; }
 .stage[data-tool="select"] #canvas [data-piece] { cursor: move; }
-.stage[data-tool="reference"] #canvas { cursor: move; }
+.stage[data-tool="reference"] #canvas, .stage[data-tool="moveGrid"] #canvas { cursor: move; }
 .stage[data-tool="erase"]:not(.pan-ready):not(.is-panning) .piece-face:hover { stroke: #a34032; stroke-width: 2; }
 .stage[data-tool="pan"] #canvas, .stage.pan-ready #canvas { cursor: grab; }
 .stage.is-panning #canvas { cursor: grabbing; }

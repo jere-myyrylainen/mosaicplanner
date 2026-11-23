@@ -4,11 +4,12 @@
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
   const I18n = window.MosaicI18n;
-  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintReference } = window.MosaicBoard;
+  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintGridPosition, paintReference } = window.MosaicBoard;
   const t = I18n.text;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
   const guideTools = new Map([['guideLine', 'line'], ['guideSquare', 'square'], ['guideCircle', 'circle']]);
+  const gridNumbers = { size: 'grid-size', weight: 'grid-weight', offsetX: 'grid-offset-x', offsetY: 'grid-offset-y' };
   const gridChecks = { visible: 'grid-visible', guidesVisible: 'guides-visible', snap: 'grid-snap', snapTiles: 'tile-snap' };
   const SNAP_PIXELS = 8;
   const colorFamilies = [
@@ -433,8 +434,11 @@
     byId('board-radius').value = board.radius;
     byId('seam-width').value = seam;
     if (seamColorInput && seamColor) seamColorInput.value = seamColor;
-    byId('grid-size').value = grid.size;
-    byId('grid-weight').value = grid.weight;
+    renderGridSettings(grid);
+  }
+
+  function renderGridSettings(grid) {
+    for (const [key, id] of Object.entries(gridNumbers)) byId(id).value = grid[key];
     for (const [key, id] of Object.entries(gridChecks)) byId(id).checked = grid[key];
   }
 
@@ -767,6 +771,7 @@
     if (tileTools.has(name)) return Boolean(activeTileId);
     if (guideTools.has(name)) return project.guides.length < Model.MAX_GUIDES;
     if (name === 'guideErase') return project.grid.guidesVisible && project.guides.length > 0;
+    if (name === 'moveGrid') return project.grid.visible;
     if (name === 'reference') return Boolean(selectedReference()?.visible);
     return true;
   }
@@ -826,6 +831,15 @@
     });
   }
 
+  function changeGrid(changes) {
+    if (gesture) {
+      renderGridSettings(project.grid);
+      return;
+    }
+    if (Object.keys(changes).every(key => changes[key] === project.grid[key])) return;
+    commit({ ...project, grid: { ...project.grid, ...changes } });
+  }
+
   function bindSettings() {
     for (const input of document.querySelectorAll('#project-name, .settings input[type="number"]')) {
       input.addEventListener('keydown', event => {
@@ -863,15 +877,17 @@
       const seamColor = seamColorInput.value;
       if (seamColor !== project.seamColor) commit({ ...project, seamColor });
     });
-    function changeGrid(key, value) {
-      commit({ ...project, grid: { ...project.grid, [key]: value } });
+    for (const key of ['offsetX', 'offsetY']) {
+      const input = byId(gridNumbers[key]);
+      input.min = -Model.GRID_OFFSET_LIMIT;
+      input.max = Model.GRID_OFFSET_LIMIT;
     }
-    for (const key of ['size', 'weight']) {
-      numericChange('grid-' + key, () => project.grid[key], value => changeGrid(key, value));
+    for (const [key, id] of Object.entries(gridNumbers)) {
+      numericChange(id, () => project.grid[key], value => changeGrid({ [key]: value }));
     }
     for (const [key, id] of Object.entries(gridChecks)) {
       const input = byId(id);
-      input.addEventListener('change', () => changeGrid(key, input.checked));
+      input.addEventListener('change', () => changeGrid({ [key]: input.checked }));
     }
   }
 
@@ -1173,6 +1189,8 @@
       if (!gesture) return;
     } else if (tool === 'reference') {
       gesture = { kind: 'reference', origin: point, reference: selectedReference() };
+    } else if (tool === 'moveGrid') {
+      gesture = { kind: 'moveGrid', origin: point, grid: project.grid };
     } else if (guideTools.has(tool)) {
       const shape = guideTools.get(tool);
       const anchor = shape === 'line' ? guideAnchorAt(point) : undefined;
@@ -1313,6 +1331,16 @@
       const y = Math.max(-limit, Math.min(limit, reference.y + (point.y - origin.y)));
       current.position = { x, y };
       paintReference(referenceElements.get(reference.id), { ...reference, ...current.position });
+    } else if (current.kind === 'moveGrid') {
+      const { grid, origin } = current;
+      const limit = Model.GRID_OFFSET_LIMIT;
+      const moveOffset = (value, delta) => delta ?
+        Number(Math.max(-limit, Math.min(limit, value + delta)).toFixed(3)) : value;
+      current.position = {
+        offsetX: moveOffset(grid.offsetX, point.x - origin.x),
+        offsetY: moveOffset(grid.offsetY, point.y - origin.y)
+      };
+      paintGridPosition({ ...grid, ...current.position });
     } else if (current.kind === 'erase') {
       if (point.x === current.previous.x && point.y === current.previous.y) return;
       for (const piece of placementIndex.piecesAlong(current.previous, point)) erasePiece(current, piece.id);
@@ -1367,6 +1395,11 @@
     if (current.kind === 'reference') {
       if (event.type === 'pointerup' && current.position) editReference(current.reference, current.position);
       else paintReference(referenceElements.get(current.reference.id), current.reference);
+      return;
+    }
+    if (current.kind === 'moveGrid') {
+      if (event.type === 'pointerup') changeGrid(current.position);
+      else paintGridPosition(project.grid);
       return;
     }
     if (current.kind === 'erase') {
