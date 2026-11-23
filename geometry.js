@@ -13,6 +13,7 @@
   const CELL_SIZE = 32;
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
+  const DEFAULT_SEAM_COLOR = '#a9a49b';
   const boardShapes = ['rectangle', 'circle', 'rounded'];
   const tileShapes = ['rectangle', 'circle', 'triangle'];
 
@@ -309,6 +310,7 @@
       name,
       board: { shape: 'circle', width: 200, height: 200, radius: 18 },
       seam: 2,
+      seamColor: DEFAULT_SEAM_COLOR,
       grid: { visible: true, size: 12, weight: 0.2, snap: false },
       tiles,
       pieces: [],
@@ -470,15 +472,19 @@
     });
   }
 
+  function validColor(value) {
+    return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+  }
+
   function readProject(value) {
     const error = 'invalidProject';
     if (!value || value.version !== 1 || !validText(value.name, 80)) throw new ValidationError(error);
-    const { board, grid, tiles, pieces, seam } = value;
+    const { board, grid, tiles, pieces, seam, seamColor = DEFAULT_SEAM_COLOR } = value;
     if (!board || !boardShapes.includes(board.shape) ||
         !validNumber(board.width, 1, 10000) || !validNumber(board.height, 1, 10000) ||
         !validNumber(board.radius, 0, Math.min(board.width, board.height) / 2) ||
         (board.shape === 'circle' && board.width !== board.height) ||
-        !validNumber(seam, 0, 100) || !grid || typeof grid.visible !== 'boolean' ||
+        !validNumber(seam, 0, 100) || !validColor(seamColor) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
         !validNumber(grid.weight, .1, 10)) throw new ValidationError(error);
     if (!Array.isArray(tiles) || tiles.length > MAX_TYPES ||
@@ -487,7 +493,7 @@
     const tileTypes = new Map();
     for (const tile of tiles) {
       if (!tile || !validText(tile.id, 100) || tileTypes.has(tile.id) || !validText(tile.name, 60) ||
-          !tileShapes.includes(tile.shape) || typeof tile.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(tile.color) ||
+          !tileShapes.includes(tile.shape) || !validColor(tile.color) ||
           !validNumber(tile.width, .5, 10000) || !validNumber(tile.height, .5, 10000) ||
           (tile.archived !== undefined && typeof tile.archived !== 'boolean') ||
           (tile.shape === 'circle' && tile.width !== tile.height)) throw new ValidationError(error);
@@ -510,6 +516,7 @@
     restored.board = { shape: board.shape, width: board.width, height: board.height, radius: board.radius };
     restored.grid = { visible: grid.visible, size: grid.size, weight: grid.weight, snap: grid.snap };
     restored.seam = seam;
+    restored.seamColor = seamColor.toLowerCase();
     if (value.references !== undefined) restored.references = readReferences(value.references);
     const index = new PlacementIndex({ ...restored, seam: 0 });
     for (const piece of pieces) {

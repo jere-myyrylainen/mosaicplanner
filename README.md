@@ -18,7 +18,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - Open **Sort and filter** in the tile library to sort tiles by name or filter by size and colour. The browser remembers the sort order.
 - The colour filter uses families such as browns and yellows. A shade can belong to more than one family.
 - Add comma-separated tags to a tile type, such as `glass, outdoor`. The tag cloud shows how many tile types have each tag. Selecting multiple tags shows tile types that have all of them. Tags are saved with the project.
-- The grout gap sets the minimum spacing for newly placed tiles. Existing tiles stay in place when you change the gap. You can adjust the guide grid independently. With snapping enabled, Fill snaps its first tile to the guide grid, then uses the tile dimensions and grout gap to place the remaining tiles.
+- Choose **Grout width** and **Grout color** under **Board**. Each tile gets half the width around its edges, so tiles spaced at the minimum gap share a full-width joint. Set the width to zero to hide the grout. Changing the width redraws the grout and updates the minimum gap for subsequent placements. The color is saved with the project, and older files open with gray grout. With snapping enabled, Fill snaps its first tile to the guide grid, then uses the tile dimensions and grout width to place the remaining tiles.
 - Use the trash button in the library to remove a tile type. Tiles already placed with that type stay on the board and in the saved file.
 - Click a tile to select it. Drag from an empty spot to select multiple tiles, or Shift-click individual tiles to add them to or remove them from the selection. Drag a selected tile to move the entire selection. Choose **Delete selected** to remove those tiles together. You can also rotate a single selected tile.
 - Scroll the mouse wheel to zoom. Use the Pan tool or hold Space while dragging to move the view.
@@ -29,7 +29,7 @@ The browser stores your most recent project locally when its settings allow it. 
 
 ## Read-only viewer
 
-Open [viewer.html](viewer.html) in Safari, including on iOS 12, and choose **Open project** to select a saved `.mosaic.json` file. On iOS, open the viewer from a web server and pick the file from the Files app. The browser opens the file locally. The viewer shows the board, placed tiles, visible guide grid and reference images. Use **+** to zoom in, swipe to scroll the enlarged board, and use **Fit to view** to see the whole board again.
+Open [viewer.html](viewer.html) in Safari, including on iOS 12, and choose **Open project** to select a saved `.mosaic.json` file. On iOS, open the viewer from a web server and pick the file from the Files app. The browser opens the file locally. The viewer shows the board, placed tiles with their grout, visible guide grid and reference images. Use **+** to zoom in, swipe to scroll the enlarged board, and use **Fit to view** to see the whole board again.
 
 To open a specific plan automatically, put its JSON file on the same web server as the viewer. For a file named `plan.mosaic.json` in the same folder, open `viewer.html?project=plan.mosaic.json`. Anyone who can access the JSON URL can read the project and its embedded reference images.
 

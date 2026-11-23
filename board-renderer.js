@@ -32,6 +32,26 @@
     return svgElement('rect', { x: -halfWidth, y: -halfHeight, width: tile.width, height: tile.height, ...props });
   }
 
+  function renderGrout({ pieces, seam, seamColor }, tileTypes, layer, elements) {
+    if (!layer) return;
+    if (elements) elements.clear();
+    layer.textContent = '';
+    if (!seam || !seamColor) return;
+
+    // The two half-strokes outside adjacent faces make up one full-width joint.
+    layer.setAttribute('fill', 'none');
+    layer.setAttribute('stroke', seamColor);
+    layer.setAttribute('stroke-width', seam);
+    layer.setAttribute('stroke-linejoin', 'round');
+    const fragment = document.createDocumentFragment();
+    for (const piece of pieces) {
+      const shape = pieceShape(piece, tileTypes.get(piece.tileId));
+      if (elements) elements.set(piece.id, shape);
+      fragment.appendChild(shape);
+    }
+    layer.appendChild(fragment);
+  }
+
   function renderBoard({ board, grid }, layers) {
     const pattern = document.getElementById('grid-pattern');
     const lines = document.getElementById('grid-lines');
@@ -63,5 +83,5 @@
     element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
   }
 
-  window.MosaicBoard = { svgElement, pieceShape, renderBoard, paintReference };
+  window.MosaicBoard = { svgElement, pieceShape, renderGrout, renderBoard, paintReference };
 }());

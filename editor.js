@@ -4,7 +4,7 @@
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
   const I18n = window.MosaicI18n;
-  const { svgElement, pieceShape, renderBoard, paintReference } = window.MosaicBoard;
+  const { svgElement, pieceShape, renderGrout, renderBoard, paintReference } = window.MosaicBoard;
   const t = I18n.text;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const LIBRARY_WIDTH_KEY = 'mosaic-planner.library-width';
@@ -22,6 +22,7 @@
     board: byId('board-layer'),
     references: byId('reference-layer'),
     grid: byId('grid-layer'),
+    grout: byId('grout-layer'),
     pieces: byId('piece-layer'),
     preview: byId('preview-layer'),
     selection: byId('selection-layer')
@@ -30,12 +31,14 @@
   const tileDialog = byId('tile-dialog');
   const drawRotation = byId('draw-rotation');
   const drawAngleInput = byId('draw-angle');
+  const seamColorInput = byId('seam-color');
   const library = byId('tile-library');
   const libraryResizer = byId('library-resizer');
   const stackedLayout = window.matchMedia('(max-width: 760px)');
   const past = [];
   const future = [];
   const pieceElements = new Map();
+  const groutElements = new Map();
   const referenceElements = new Map();
   const libraryFilters = { size: '', color: '', tags: new Set() };
 
@@ -448,7 +451,8 @@
   }
 
   function renderPieces() {
-    const tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
+    const tileTypes = placementIndex.tileTypes;
+    renderGrout?.(project, tileTypes, layers.grout, groutElements);
     const fragment = document.createDocumentFragment();
     pieceElements.clear();
     for (const piece of project.pieces) {
@@ -459,6 +463,11 @@
     }
     layers.pieces.replaceChildren(fragment);
     renderPieceSummary();
+  }
+
+  function markPiece(id, className, active) {
+    pieceElements.get(id)?.classList.toggle(className, active);
+    groutElements.get(id)?.classList.toggle(className, active);
   }
 
   function renderPieceSummary() {
@@ -516,7 +525,7 @@
   }
 
   function renderSettings() {
-    const { board, grid, name, seam } = project;
+    const { board, grid, name, seam, seamColor } = project;
     byId('project-name').value = name;
     document.querySelectorAll('[name="board-shape"]').forEach(input => { input.checked = input.value === board.shape; });
     renderBoardWidthLabel();
@@ -527,6 +536,7 @@
     byId('board-radius').max = Math.min(board.width, board.height) / 2;
     byId('board-radius').value = board.radius;
     byId('seam-width').value = seam;
+    if (seamColorInput && seamColor) seamColorInput.value = seamColor;
     byId('grid-size').value = grid.size;
     byId('grid-weight').value = grid.weight;
     byId('grid-visible').checked = grid.visible;
@@ -910,8 +920,20 @@
       numericChange('board-' + key, () => project.board[key], value => changeBoard({ [key]: value }));
     }
     numericChange('seam-width', () => project.seam, seam => {
+      if (gesture) {
+        byId('seam-width').value = project.seam;
+        return;
+      }
       commit({ ...project, seam });
       if (project.pieces.length) notify('seamChanged');
+    });
+    seamColorInput?.addEventListener('change', () => {
+      if (gesture) {
+        seamColorInput.value = project.seamColor;
+        return;
+      }
+      const seamColor = seamColorInput.value;
+      if (seamColor !== project.seamColor) commit({ ...project, seamColor });
     });
     function changeGrid(key, value) {
       commit({ ...project, grid: { ...project.grid, [key]: value } });
@@ -1187,7 +1209,7 @@
   function erasePiece(current, id) {
     if (current.erased.has(id)) return;
     current.erased.add(id);
-    pieceElements.get(id)?.classList.add('erased-piece');
+    markPiece(id, 'erased-piece', true);
   }
 
   function drawingGuide(current, end) {
@@ -1225,7 +1247,7 @@
     if (!current.index && Math.hypot(dx, dy) < .4) return;
     if (!current.index) {
       current.index = new Model.PlacementIndex(project, selectedIds);
-      for (const piece of pieces) pieceElements.get(piece.id).classList.add('moving-piece');
+      for (const piece of pieces) markPiece(piece.id, 'moving-piece', true);
     }
     const position = snap({ x: anchor.x + dx, y: anchor.y + dy });
     const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
@@ -1241,7 +1263,7 @@
     if (!current.index) return;
     layers.selection.removeAttribute('transform');
     layers.selection.classList.remove('invalid-selection');
-    for (const piece of current.pieces) pieceElements.get(piece.id)?.classList.remove('moving-piece');
+    for (const piece of current.pieces) markPiece(piece.id, 'moving-piece', false);
     if (!released || (!current.offset.x && !current.offset.y)) return;
     if (!current.valid) {
       notify(current.pieces.length === 1 ? 'tilePlacementBlocked' : 'tilesPlacementBlocked');
@@ -1325,7 +1347,7 @@
         const pieces = project.pieces.filter(piece => !current.erased.has(piece.id));
         commit({ ...project, pieces });
       } else {
-        for (const id of current.erased) pieceElements.get(id)?.classList.remove('erased-piece');
+        for (const id of current.erased) markPiece(id, 'erased-piece', false);
       }
       return;
     }

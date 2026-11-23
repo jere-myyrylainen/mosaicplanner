@@ -3,7 +3,7 @@
 
   const Model = window.MosaicGeometry;
   const I18n = window.MosaicI18n;
-  const { svgElement, pieceShape, renderBoard, paintReference } = window.MosaicBoard;
+  const { svgElement, pieceShape, renderGrout, renderBoard, paintReference } = window.MosaicBoard;
   const XLINK = 'http://www.w3.org/1999/xlink';
   const zoomLevels = [1, 1.5, 2, 3, 4];
   const byId = id => document.getElementById(id);
@@ -13,6 +13,7 @@
     board: byId('board-layer'),
     references: byId('reference-layer'),
     grid: byId('grid-layer'),
+    grout: byId('grout-layer'),
     pieces: byId('piece-layer')
   };
   let project;
@@ -72,6 +73,7 @@
     renderBoard(next, layers);
     layers.references.textContent = '';
     layers.references.appendChild(images);
+    if (renderGrout) renderGrout(next, tileTypes, layers.grout);
     layers.pieces.textContent = '';
     layers.pieces.appendChild(pieces);
     const { width, height } = next.board;
