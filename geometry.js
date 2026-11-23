@@ -14,6 +14,7 @@
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
+  const MIN_TRIANGLE_HEIGHT = .1;
   const boardShapes = ['rectangle', 'circle', 'rounded'];
   const tileShapes = ['rectangle', 'circle', 'triangle', 'equilateral'];
 
@@ -23,6 +24,18 @@
 
   function triangleHeight(side) {
     return side * Math.sqrt(3) / 2;
+  }
+
+  function triangleHeightFromAngle(base, angle) {
+    if (!(base > 0 && angle > 0 && angle < 180)) return NaN;
+    if (angle === 60) return triangleHeight(base);
+    return base / (2 * Math.tan(angle * Math.PI / 360));
+  }
+
+  function triangleApexAngle(base, height) {
+    if (!(base > 0 && height > 0)) return NaN;
+    if (height === triangleHeight(base)) return 60;
+    return Math.atan2(base / 2, height) * 360 / Math.PI;
   }
 
   function pointInBoard(board, point) {
@@ -499,7 +512,8 @@
       if (!tile || !validText(tile.id, 100) || tileTypes.has(tile.id) || !validText(tile.name, 60) ||
           !tileShapes.includes(tile.shape) || !validColor(tile.color) ||
           !validNumber(tile.width, .5, 10000) ||
-          !validNumber(tile.height, tile.shape === 'equilateral' ? triangleHeight(.5) : .5, 10000) ||
+          !validNumber(tile.height, tile.shape === 'triangle' ? MIN_TRIANGLE_HEIGHT :
+            tile.shape === 'equilateral' ? triangleHeight(.5) : .5, 10000) ||
           (tile.archived !== undefined && typeof tile.archived !== 'boolean') ||
           (tile.shape === 'circle' && tile.width !== tile.height)) throw new ValidationError(error);
       const height = tile.shape === 'equilateral' ? triangleHeight(tile.width) : tile.height;
@@ -542,9 +556,10 @@
 
   const model = {
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
-    REFERENCE_POSITION_LIMIT, PlacementIndex, ValidationError, angleInDegrees, blankProject, colorFamilies, demoProject,
+    REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, colorFamilies, demoProject,
     fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, triangleHeight, validNumber, validReferenceDimensions
+    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    validNumber, validReferenceDimensions
   };
 
   if (typeof module === 'object') module.exports = model;
