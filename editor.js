@@ -28,6 +28,7 @@
   };
   const newDialog = byId('new-dialog');
   const tileDialog = byId('tile-dialog');
+  const drawAngleInput = byId('draw-angle');
   const library = byId('tile-library');
   const libraryResizer = byId('library-resizer');
   const stackedLayout = window.matchMedia('(max-width: 760px)');
@@ -58,6 +59,8 @@
   let selectedIds = new Set();
   let editingTileId = null;
   let tool = 'draw';
+  let drawAngle = 0;
+  let drawHover;
   let placementIndex;
   let gesture = null;
   let spacePressed = false;
@@ -829,6 +832,7 @@
     if (gesture || (!activeTileId && tileTools.has(name)) ||
         (name === 'reference' && !selectedReference()?.visible)) return;
     tool = name;
+    drawHover = undefined;
     if (name !== 'select') {
       selectedIds.clear();
       renderSelection();
@@ -849,6 +853,7 @@
     });
     byId('tool-name').textContent = t(tool);
     byId('tool-hint').textContent = t(tool + 'Hint');
+    byId('draw-rotation').hidden = tool !== 'draw';
     byId('outline-field').hidden = tool !== 'shape';
   }
 
@@ -1012,22 +1017,23 @@
     };
   }
 
-  function pieceAt(center, tile) {
-    return { tileId: tile.id, x: center.x, y: center.y, angle: 0 };
+  function pieceAt(center, tile, angle) {
+    return { tileId: tile.id, x: center.x, y: center.y, angle };
   }
 
   function placeCandidate(action, point, snapToGrid) {
     if (action.placed.length >= action.limit) return;
-    const candidate = pieceAt(snapToGrid ? snap(point) : point, action.tile);
+    const candidate = pieceAt(snapToGrid ? snap(point) : point, action.tile, action.angle);
     const geometry = action.index.geometry(candidate);
     if (!action.index.accepts(geometry)) return;
     action.index.add(geometry);
     action.placed.push(candidate);
   }
 
-  function placementAction(tile, limit = Model.MAX_STROKE) {
+  function placementAction(tile, { angle = 0, limit = Model.MAX_STROKE } = {}) {
     return {
       tile,
+      angle,
       limit: Math.min(limit, Model.MAX_PIECES - project.pieces.length),
       index: new Model.PlacementIndex(project),
       placed: []
@@ -1056,7 +1062,7 @@
 
   function hoverPlacement(point) {
     const tile = placementIndex.tileTypes.get(activeTileId);
-    const piece = pieceAt(snap(point), tile);
+    const piece = pieceAt(snap(point), tile, drawAngle);
     previewPieces(placementIndex.accepts(placementIndex.geometry(piece)) ? [piece] : [], tile);
   }
 
@@ -1120,6 +1126,8 @@
   function beginPointer(event) {
     if (gesture || libraryResize || (event.button !== 0 && event.button !== 1)) return;
     if (tileDialog.open || newDialog.open) return;
+    if (document.activeElement === drawAngleInput) drawAngleInput.blur();
+    drawHover = undefined;
     const point = surfacePoint(event);
     const pan = tool === 'pan' || spacePressed || event.button === 1;
     const tile = placementIndex.tileTypes.get(activeTileId);
@@ -1145,7 +1153,7 @@
       fillAt(point, tile);
       return;
     } else if (tool === 'draw') {
-      const action = placementAction(tile);
+      const action = placementAction(tile, { angle: drawAngle });
       if (!action.limit) {
         notify('tooManyTiles');
         return;
@@ -1256,7 +1264,7 @@
     } else if (current.kind === 'draw') {
       const { action, previous } = current;
       if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1e-7) return;
-      const spacing = Model.lineSpacing(action.tile, project.seam, previous, point);
+      const spacing = Model.lineSpacing(action.tile, project.seam, previous, point, action.angle);
       const sample = Model.sampleSegment(previous, point, spacing, spacing * current.phase);
       for (const center of sample.points) placeCandidate(action, center, true);
       current.previous = point;
@@ -1265,7 +1273,7 @@
     } else {
       current.lastPoint = point;
       const guide = drawingGuide(current, snap(point));
-      const action = placementAction(current.tile, 350);
+      const action = placementAction(current.tile, { limit: 350 });
       for (const center of guide.points) placeCandidate(action, center, true);
       previewPieces(action.placed, current.tile, guide.path);
     }
@@ -1273,7 +1281,10 @@
 
   function movePointer(event) {
     if (gesture) updateGesture(event);
-    else if (tool === 'draw' && !spacePressed) hoverPlacement(surfacePoint(event));
+    else if (tool === 'draw' && !spacePressed) {
+      drawHover = { clientX: event.clientX, clientY: event.clientY };
+      hoverPlacement(surfacePoint(drawHover));
+    }
   }
 
   function endPointer(event) {
@@ -1452,6 +1463,7 @@
       if (event.target.closest('button')) return;
       event.preventDefault();
       spacePressed = true;
+      drawHover = undefined;
       stage.classList.add('pan-ready');
       layers.preview.replaceChildren();
       return;
@@ -1487,7 +1499,18 @@
     stage.classList.remove('pan-ready');
   }
 
+  function changeDrawAngle(angle) {
+    if (gesture || !Number.isFinite(angle)) return;
+    drawAngle = (Math.round(Model.angleInDegrees(angle) * 10) % 3600) / 10;
+    if (tool === 'draw' && drawHover && !spacePressed) hoverPlacement(surfacePoint(drawHover));
+  }
+
   function rotateByStep() {
+    if (tool === 'draw') {
+      changeDrawAngle(drawAngle + 15);
+      drawAngleInput.value = drawAngle;
+      return;
+    }
     const selected = singleSelectedPiece();
     if (selected) rotateSelected(selected.angle + 15);
   }
@@ -1523,6 +1546,15 @@
   tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
+  byId('rotate-draw').addEventListener('click', rotateByStep);
+  drawAngleInput.addEventListener('input', () => changeDrawAngle(drawAngleInput.valueAsNumber));
+  drawAngleInput.addEventListener('blur', () => { drawAngleInput.value = drawAngle; });
+  drawAngleInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      drawAngleInput.blur();
+    }
+  });
   byId('rotate').addEventListener('click', rotateByStep);
   byId('selected-angle').addEventListener('change', event => rotateSelected(event.target.valueAsNumber));
   byId('delete-piece').addEventListener('click', removeSelected);
@@ -1554,6 +1586,7 @@
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('lostpointercapture', endPointer);
   canvas.addEventListener('pointerleave', () => {
+    drawHover = undefined;
     if (!gesture) layers.preview.replaceChildren();
   });
   document.addEventListener('keydown', onKeyDown);

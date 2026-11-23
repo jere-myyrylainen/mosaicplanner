@@ -137,6 +137,13 @@
           <button type="button" id="undo" class="icon-button" data-title="undoTitle" data-aria-label="undo"><svg class="icon"><use href="#i-undo"/></svg></button>
           <button type="button" id="redo" class="icon-button" data-title="redoTitle" data-aria-label="redo"><svg class="icon"><use href="#i-redo"/></svg></button>
         </div>
+        <div id="draw-rotation" class="button-group" hidden>
+          <label class="draw-angle">
+            <span data-text="rotation"></span>
+            <span class="number-field"><input type="number" id="draw-angle" step="0.1" value="0" inputmode="decimal" data-aria-label="drawAngle"><span aria-hidden="true">°</span></span>
+          </label>
+          <button type="button" id="rotate-draw" class="icon-button" data-title="rotateTitle" data-aria-label="rotateLabel" aria-keyshortcuts="R"><svg class="icon"><use href="#i-rotate"/></svg></button>
+        </div>
         <label id="outline-field" class="outline-mode" hidden><span class="sr-only" data-text="outlineShape"></span><select id="outline-shape"><option value="rectangle" data-text="rectangle"></option><option value="ellipse" data-text="ellipse"></option></select></label>
         <span class="tool-name" id="tool-name"></span>
       </div>

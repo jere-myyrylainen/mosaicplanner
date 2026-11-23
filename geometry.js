@@ -261,12 +261,18 @@
     return { points, nextDistance: Math.max(0, distance - length), limited: distance < length };
   }
 
-  function lineSpacing(tile, gap, start, end) {
-    const dx = Math.abs(end.x - start.x);
-    const dy = Math.abs(end.y - start.y);
+  function lineSpacing(tile, gap, start, end, angle = 0) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
     const length = Math.hypot(dx, dy);
     if (!length || tile.shape === 'circle') return tile.width + gap;
-    return Math.min((tile.width + gap) * length / dx, (tile.height + gap) * length / dy);
+    // Measure the stroke direction along the tile's own axes.
+    const radians = angle * Math.PI / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const alongWidth = Math.abs(dx * cos + dy * sin);
+    const alongHeight = Math.abs(dy * cos - dx * sin);
+    return Math.min((tile.width + gap) * length / alongWidth, (tile.height + gap) * length / alongHeight);
   }
 
   function outlinePath(shape, start, end) {
