@@ -65,9 +65,11 @@ h1 { margin: 0; font-size: 1.07rem; font-weight: 750; letter-spacing: -.035em; }
 .primary:hover { background: var(--accent-dark); }
 
 .editor {
+  --library-width: 252px;
   min-height: calc(100dvh - 68px); display: grid;
-  grid-template-columns: minmax(205px, 242px) minmax(0, 1fr) 252px;
+  grid-template-columns: minmax(205px, 242px) minmax(0, 1fr) var(--library-width);
 }
+.editor.library-expanded { --library-width: clamp(320px, 38%, 760px); }
 .sidebar { background: var(--paper); min-width: 0; }
 .settings { border-right: 1px solid var(--line); }
 .library {
@@ -233,6 +235,7 @@ select {
 .library-heading .icon-button { width: 30px; height: 30px; }
 #expand-library { border-color: var(--line); color: var(--accent); }
 #expand-library .icon { width: 1rem; height: 1rem; }
+#expand-library[aria-expanded="true"] { background: var(--active); border-color: #c8ded0; }
 .library-tools summary {
   display: flex; align-items: center; gap: .4rem; padding: .5rem .55rem;
   cursor: pointer; list-style: none; font-size: .875rem; font-weight: 650;
@@ -311,39 +314,32 @@ select {
   .library .tile-list:not(:empty) { min-height: 3.75rem; }
 }
 
+.library-expanded .add-tile-text { width: auto; align-self: flex-start; }
+.library-expanded .library-filters { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+.library-expanded .library-filters fieldset, .library-expanded .clear-filters { grid-column: 1 / -1; }
+.library-expanded .tile-list { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: .55rem; }
+.library-expanded .tile-row {
+  grid-template-columns: minmax(0, 1fr) 32px 32px; grid-template-rows: 1fr auto;
+  align-items: stretch; padding: .28rem; border-color: var(--line); background: #fff;
+}
+.library-expanded .tile-row.active, .library-expanded .tile-row:hover {
+  background: #edf4ed; border-color: #c9dfce;
+}
+.library-expanded .tile-choice {
+  grid-column: 1 / -1; flex-direction: column; align-items: flex-start; gap: .5rem;
+  min-height: 5.5rem; padding: .45rem;
+}
+.library-expanded .tile-swatch { width: 34px; height: 34px; }
+.library-expanded .tile-caption { width: 100%; }
+.library-expanded .edit-tile { grid-column: 2; }
+.library-expanded .remove-tile { grid-column: 3; }
+.library-expanded .edit-tile, .library-expanded .remove-tile { width: 32px; }
+
 dialog {
   width: min(420px, calc(100% - 2rem)); border: 1px solid var(--line); border-radius: 14px; padding: 0;
   color: var(--ink); background: var(--paper); box-shadow: 0 22px 80px #142c3840;
 }
 dialog::backdrop { background: #23342e65; }
-.library-dialog {
-  width: min(920px, calc(100% - 2rem)); max-height: calc(100% - 2rem); overflow: auto;
-}
-.library-dialog .library-content { padding: 0 1rem 1rem; }
-.library-dialog .library-heading {
-  position: sticky; top: 0; z-index: 1;
-  padding: .65rem 1rem; background: var(--paper); border-bottom: 1px solid var(--line);
-}
-.library-dialog .add-tile-text { width: auto; }
-.library-dialog .library-filters { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
-.library-dialog .library-filters fieldset, .library-dialog .clear-filters { grid-column: 1 / -1; }
-.library-dialog .tile-list { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .65rem; }
-.library-dialog .tile-row {
-  grid-template-columns: minmax(0, 1fr) 32px 32px; grid-template-rows: 1fr auto;
-  align-items: stretch; padding: .28rem; border-color: var(--line); background: #fff;
-}
-.library-dialog .tile-row.active, .library-dialog .tile-row:hover {
-  background: #edf4ed; border-color: #c9dfce;
-}
-.library-dialog .tile-choice {
-  grid-column: 1 / -1; flex-direction: column; align-items: flex-start; gap: .5rem;
-  min-height: 6.25rem; padding: .45rem;
-}
-.library-dialog .tile-swatch { width: 36px; height: 36px; }
-.library-dialog .tile-caption { width: 100%; }
-.library-dialog .edit-tile { grid-column: 2; }
-.library-dialog .remove-tile { grid-column: 3; }
-.library-dialog .edit-tile, .library-dialog .remove-tile { width: 32px; }
 dialog form { display: grid; gap: .95rem; padding: 1.25rem; }
 dialog form > p { margin: 0; color: var(--muted); }
 .dialog-heading, .dialog-actions { display: flex; align-items: center; gap: .4rem; }
@@ -356,9 +352,19 @@ dialog form > p { margin: 0; color: var(--muted); }
   background: #254037; color: white; box-shadow: 0 4px 15px #19352a28; font-size: .875rem;
 }
 @media (max-width: 990px) {
-  .editor { grid-template-columns: 185px minmax(0, 1fr) 190px; }
+  .editor { --library-width: 190px; grid-template-columns: 185px minmax(0, 1fr) var(--library-width); }
   .panel { padding-inline: .85rem; }
   .tool-name { display: none; }
+}
+@media (min-width: 761px) {
+  .library-expanded .workspace { display: flex; flex-direction: column; }
+  .library-expanded .toolbar, .library-expanded .statusbar { flex: none; }
+  .library-expanded .stage { flex: 1; min-height: 410px; }
+}
+@media (min-width: 761px) and (max-width: 990px) {
+  .editor.library-expanded { --library-width: clamp(286px, 36%, 380px); }
+  .library-expanded .toolbar { padding-inline: .55rem; }
+  .library-expanded .toolbar .icon-button { width: 32px; }
 }
 @media (max-width: 760px) {
   .app-header { grid-template-columns: minmax(0, 1fr) auto; padding-inline: .75rem; gap: .35rem .55rem; }
@@ -366,6 +372,9 @@ dialog form > p { margin: 0; color: var(--muted); }
   .language-select { grid-row: 2; grid-column: 2; }
   .editor { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
   .workspace { grid-row: 1; grid-column: 1 / -1; grid-template-rows: auto minmax(330px, 60dvh) auto; }
+  .editor.library-expanded .library { grid-area: 2 / 1 / 3 / -1; border-left: 0; }
+  .editor.library-expanded .settings { grid-area: 3 / 1 / 4 / -1; }
+  .library-expanded .tile-list { max-height: 55dvh; overflow: auto; }
   .sidebar { border-top: 1px solid var(--line); }
   .settings { border-right: 0; }
   .file-actions { gap: .12rem; }
@@ -383,5 +392,4 @@ dialog form > p { margin: 0; color: var(--muted); }
   .panel { padding: .9rem .6rem; }
   .tile-choice { gap: .32rem; }
   .tile-swatch { width: 23px; height: 23px; }
-  .library-dialog .tile-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

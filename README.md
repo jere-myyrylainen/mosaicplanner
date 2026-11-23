@@ -14,7 +14,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - Add rectangular, circular, or triangular tile types to the library. Set the base length for a triangle and edit either its height or apex angle. The other field updates automatically. An apex angle of 60° makes the triangle equilateral. Choose a tile type and click to place a tile or drag to draw. The Line and Shape tools place tiles along an outline. The Fill tool places tiles in a connected empty area, using a grid sized to the selected tile.
 - With the Freehand tool, set **Rotation** below the board before clicking or dragging. Press **R** or use the rotate button to turn the next tiles by 15°.
 - A red, translucent tile preview marks a blocked freehand placement and keeps the tiles and grout underneath visible.
-- Use the expand button next to **Tile library** to browse the tiles in a larger grid. Choose a tile to return to the board. You can also add, edit, filter and remove tiles in the grid.
+- Use the expand button next to **Tile library** to widen the sidebar and browse the tiles in a grid. The board remains available while you work. Use the same button to switch back to the compact list.
 - Open **Sort and filter** in the tile library to sort tiles by name or filter by size and colour. The browser remembers the sort order.
 - The colour filter uses families such as browns and yellows. A shade can belong to more than one family.
 - Add comma-separated tags to a tile type, such as `glass, outdoor`. The tag cloud shows how many tile types have each tag. Selecting multiple tags shows tile types that have all of them. Tags are saved with the project.

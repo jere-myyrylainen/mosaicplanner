@@ -13,6 +13,7 @@
   ];
 
   const byId = id => document.getElementById(id);
+  const editor = document.querySelector('.editor');
   const canvas = byId('canvas');
   const stage = byId('stage');
   const layers = {
@@ -33,11 +34,7 @@
   const drawRotation = byId('draw-rotation');
   const drawAngleInput = byId('draw-angle');
   const seamColorInput = byId('seam-color');
-  const libraryPanel = byId('library-panel');
-  const libraryContent = byId('library-content');
-  const libraryDialog = byId('library-dialog');
   const expandLibrary = byId('expand-library');
-  const closeLibrary = byId('close-library');
   const past = [];
   const future = [];
   const pieceElements = new Map();
@@ -584,7 +581,6 @@
         activeTileId = tile.id;
         if (tool === 'select' || tool === 'pan' || tool === 'erase') setTool('draw');
         renderLibrary();
-        if (libraryDialog?.open) libraryDialog.close();
       });
       if (tile.id === focusedTileId) focusTarget = choice;
 
@@ -634,29 +630,19 @@
     if (focusTarget) focusTarget.focus({ preventScroll: true });
   }
 
-  function bindExpandedLibrary() {
-    if (!libraryDialog) return;
-    const list = byId('tile-list');
-    const feedback = byId('feedback');
-    let sidebarScroll;
-    expandLibrary.addEventListener('click', () => {
-      if (gesture || libraryContent.parentNode !== libraryPanel) return;
-      sidebarScroll = { panel: libraryPanel.scrollTop, list: list.scrollTop };
-      drawHover = undefined;
-      layers.preview.replaceChildren();
-      expandLibrary.focus({ preventScroll: true });
-      libraryDialog.append(libraryContent, feedback);
-      libraryDialog.showModal();
-      libraryDialog.scrollTop = 0;
-    });
-    closeLibrary.addEventListener('click', () => libraryDialog.close());
-    libraryDialog.addEventListener('close', () => {
-      libraryPanel.append(libraryContent);
-      libraryDialog.before(feedback);
-      expandLibrary.focus({ preventScroll: true });
-      libraryPanel.scrollTop = sidebarScroll.panel;
-      list.scrollTop = sidebarScroll.list;
-    });
+  function toggleLibraryLayout() {
+    if (gesture) return;
+    const expanded = editor.classList.toggle('library-expanded');
+    const label = expanded ? 'collapseLibrary' : 'expandLibrary';
+    expandLibrary.setAttribute('aria-expanded', expanded);
+    expandLibrary.dataset.title = label;
+    expandLibrary.dataset.ariaLabel = label;
+    expandLibrary.title = t(label);
+    expandLibrary.setAttribute('aria-label', t(label));
+    expandLibrary.querySelector('use').setAttribute('href', expanded ? '#i-collapse' : '#i-expand');
+    drawHover = undefined;
+    layers.preview.replaceChildren();
+    renderView();
   }
 
   function bindLibraryFilters() {
@@ -994,7 +980,7 @@
     activeTileId = tile.id;
     tileDialog.close();
     commit({ ...project, tiles });
-    if (libraryDialog?.open && editingTileId) {
+    if (editingTileId) {
       const nextControl = byId('tile-list').querySelector('.tile-row.active .edit-tile') || byId('add-tile-text');
       nextControl.focus({ preventScroll: true });
     }
@@ -1137,7 +1123,7 @@
 
   function beginPointer(event) {
     if (gesture || (event.button !== 0 && event.button !== 1)) return;
-    if (tileDialog.open || newDialog.open || libraryDialog?.open) return;
+    if (tileDialog.open || newDialog.open) return;
     if (drawAngleInput && document.activeElement === drawAngleInput) drawAngleInput.blur();
     drawHover = undefined;
     const point = surfacePoint(event);
@@ -1449,7 +1435,7 @@
   }
 
   function onKeyDown(event) {
-    if (!placementIndex || tileDialog.open || newDialog.open || libraryDialog?.open) return;
+    if (!placementIndex || tileDialog.open || newDialog.open) return;
     const key = event.key.toLowerCase();
     if (key === 'escape') {
       event.preventDefault();
@@ -1543,7 +1529,7 @@
   bindSettings();
   bindLibraryFilters();
   byId('library-resizer')?.remove();
-  bindExpandedLibrary();
+  expandLibrary?.addEventListener('click', toggleLibraryLayout);
   bindReferences();
   document.querySelectorAll('[data-tool].tool').forEach(button => {
     button.addEventListener('click', () => setTool(button.dataset.tool));
@@ -1562,9 +1548,7 @@
     syncTriangleDimensions();
   });
   byId('tile-form').addEventListener('submit', saveTile);
-  tileDialog.addEventListener('cancel', () => {
-    if (!libraryDialog?.open) returnToSelection();
-  });
+  tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
   if (drawAngleInput) {
