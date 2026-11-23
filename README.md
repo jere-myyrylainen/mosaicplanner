@@ -12,7 +12,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - Choose a rectangular, circular, or rounded rectangular board. Enter board, guide grid, and tile dimensions in millimetres.
 - Under **Reference images**, add JPG or PNG images beneath the grid and tiles. Adjust the selected image's width and opacity, or select **Move image** and drag on the canvas. Reference images are included in the project JSON file.
 - Add rectangular, circular, or triangular tile types to the library. Choose a tile type and click to place a tile or drag to draw. The Line and Shape tools place tiles along an outline. The Fill tool places tiles in a connected empty area, using a grid sized to the selected tile.
-- With the Freehand tool, set **Rotation** before clicking or dragging to place rotated tiles. Press **R** or use the rotate button to turn the next tiles by 15°.
+- With the Freehand tool, set **Rotation** below the board before clicking or dragging. Press **R** or use the rotate button to turn the next tiles by 15°.
 - Resize the tile library by dragging its left edge or by tabbing to the resize handle and using the arrow keys. The browser remembers the width. Double-click the handle to restore the default.
 - Open **Sort and filter** in the tile library to sort tiles by name or filter by size and colour. The browser remembers the sort order.
 - The colour filter uses families such as browns and yellows. A shade can belong to more than one family.

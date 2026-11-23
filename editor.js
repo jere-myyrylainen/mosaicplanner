@@ -28,6 +28,7 @@
   };
   const newDialog = byId('new-dialog');
   const tileDialog = byId('tile-dialog');
+  const drawRotation = byId('draw-rotation');
   const drawAngleInput = byId('draw-angle');
   const library = byId('tile-library');
   const libraryResizer = byId('library-resizer');
@@ -852,8 +853,11 @@
         (!canMoveReference && button.dataset.tool === 'reference');
     });
     byId('tool-name').textContent = t(tool);
-    byId('tool-hint').textContent = t(tool + 'Hint');
-    byId('draw-rotation').hidden = tool !== 'draw';
+    const showRotation = tool === 'draw' && Boolean(drawRotation);
+    const hint = byId('tool-hint');
+    hint.textContent = t(tool + 'Hint');
+    hint.hidden = showRotation;
+    if (drawRotation) drawRotation.hidden = !showRotation;
     byId('outline-field').hidden = tool !== 'shape';
   }
 
@@ -1126,7 +1130,7 @@
   function beginPointer(event) {
     if (gesture || libraryResize || (event.button !== 0 && event.button !== 1)) return;
     if (tileDialog.open || newDialog.open) return;
-    if (document.activeElement === drawAngleInput) drawAngleInput.blur();
+    if (drawAngleInput && document.activeElement === drawAngleInput) drawAngleInput.blur();
     drawHover = undefined;
     const point = surfacePoint(event);
     const pan = tool === 'pan' || spacePressed || event.button === 1;
@@ -1508,7 +1512,7 @@
   function rotateByStep() {
     if (tool === 'draw') {
       changeDrawAngle(drawAngle + 15);
-      drawAngleInput.value = drawAngle;
+      if (drawAngleInput) drawAngleInput.value = drawAngle;
       return;
     }
     const selected = singleSelectedPiece();
@@ -1546,15 +1550,17 @@
   tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
-  byId('rotate-draw').addEventListener('click', rotateByStep);
-  drawAngleInput.addEventListener('input', () => changeDrawAngle(drawAngleInput.valueAsNumber));
-  drawAngleInput.addEventListener('blur', () => { drawAngleInput.value = drawAngle; });
-  drawAngleInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      drawAngleInput.blur();
-    }
-  });
+  if (drawAngleInput) {
+    byId('rotate-draw').addEventListener('click', rotateByStep);
+    drawAngleInput.addEventListener('input', () => changeDrawAngle(drawAngleInput.valueAsNumber));
+    drawAngleInput.addEventListener('blur', () => { drawAngleInput.value = drawAngle; });
+    drawAngleInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        drawAngleInput.blur();
+      }
+    });
+  }
   byId('rotate').addEventListener('click', rotateByStep);
   byId('selected-angle').addEventListener('change', event => rotateSelected(event.target.valueAsNumber));
   byId('delete-piece').addEventListener('click', removeSelected);
