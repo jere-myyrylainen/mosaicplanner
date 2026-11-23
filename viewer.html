@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f9f9f6">
+  <title>Mosaic Planner · Katselu</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="viewer.css">
+  <script defer src="i18n.js"></script>
+  <script defer src="geometry.js"></script>
+  <script defer src="board-renderer.js"></script>
+  <script defer src="viewer.js"></script>
+</head>
+<body class="viewer">
+  <header class="viewer-header">
+    <h1>Mosaic Planner <span data-text="viewer">Katselu</span></h1>
+    <div class="viewer-actions">
+      <label class="button primary viewer-open">
+        <span data-text="viewerOpen">Avaa suunnitelma</span>
+        <input type="file" id="project-file">
+      </label>
+      <select id="language-select" class="language-select" data-aria-label="language">
+        <option value="fi" lang="fi">Suomi</option>
+        <option value="en" lang="en">English</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="viewer-main">
+    <p id="viewer-status" role="status"></p>
+    <section id="viewer-project" aria-labelledby="viewer-name" hidden>
+      <div class="viewer-summary">
+        <div class="viewer-heading">
+          <h2 id="viewer-name"></h2>
+          <p id="viewer-size"></p>
+        </div>
+        <div class="viewer-zoom" role="group" data-aria-label="zoomControls">
+          <button type="button" id="zoom-out" class="button quiet" data-aria-label="zoomOut">−</button>
+          <output id="zoom-level" data-aria-label="zoom">100 %</output>
+          <button type="button" id="zoom-in" class="button quiet" data-aria-label="zoomIn">+</button>
+          <button type="button" id="zoom-fit" class="button quiet" data-text="fitView">Sovita näkymään</button>
+        </div>
+      </div>
+      <div id="viewer-viewport" class="viewer-stage" tabindex="0" data-aria-label="canvas" role="region">
+        <svg id="viewer-board" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="viewer-name">
+          <defs>
+            <pattern id="grid-pattern" patternUnits="userSpaceOnUse"><path id="grid-lines" fill="none" stroke="#59695e" stroke-opacity=".28"/></pattern>
+            <clipPath id="board-clip"></clipPath>
+          </defs>
+          <g id="board-layer"></g>
+          <g id="reference-layer" clip-path="url(#board-clip)"></g>
+          <g id="grid-layer"></g>
+          <g id="piece-layer"></g>
+        </svg>
+      </div>
+    </section>
+    <div id="viewer-empty" class="viewer-stage viewer-empty">
+      <p data-text="viewerEmpty">Valitse Mosaic Plannerissa tallennettu .mosaic.json-tiedosto.</p>
+    </div>
+  </main>
+</body>
+</html>

@@ -9,6 +9,11 @@
     newProject: ["Uusi", "New"],
     openProject: ["Avaa", "Open"],
     saveProject: ["Tallenna", "Save"],
+    viewer: ["Katselu", "Viewer"],
+    viewerOpen: ["Avaa suunnitelma", "Open project"],
+    viewerEmpty: ["Valitse Mosaic Plannerissa tallennettu .mosaic.json-tiedosto.", "Choose a .mosaic.json file saved in Mosaic Planner."],
+    viewerLoading: ["Avataan suunnitelmaa…", "Opening project…"],
+    viewerLoadFailed: ["Suunnitelmaa ei voitu avata. Tarkista linkki tai valitse tiedosto.", "Could not open the project. Check the link or choose a file."],
     projectSettings: ["Työn asetukset", "Project settings"],
     board: ["Työn alusta", "Board"],
     shape: ["Muoto", "Shape"],
@@ -239,8 +244,8 @@
     let saved;
     try {
       saved = localStorage.getItem(LANGUAGE_KEY);
-    } catch {
-      // The editor can still switch languages for this session.
+    } catch (error) {
+      // The app can still switch languages for this session.
     }
     apply(saved);
   }
@@ -249,8 +254,8 @@
     apply(next);
     try {
       localStorage.setItem(LANGUAGE_KEY, language);
-    } catch {
-      // The editor can still switch languages for this session.
+    } catch (error) {
+      // The app can still switch languages for this session.
     }
   }
 

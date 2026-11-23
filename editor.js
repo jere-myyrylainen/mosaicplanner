@@ -4,11 +4,10 @@
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
   const I18n = window.MosaicI18n;
+  const { svgElement, pieceShape, renderBoard, paintReference } = window.MosaicBoard;
   const t = I18n.text;
-  const MAX_PROJECT_FILE = 32 * 1024 * 1024;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const LIBRARY_WIDTH_KEY = 'mosaic-planner.library-width';
-  const SVG = 'http://www.w3.org/2000/svg';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
   const colorFamilies = [
     'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'white', 'gray', 'black'
@@ -259,73 +258,14 @@
     feedbackTimer = setTimeout(() => { feedback.hidden = true; }, 4200);
   }
 
-  function svgElement(tag, attributes = {}) {
-    const element = document.createElementNS(SVG, tag);
-    for (const [name, value] of Object.entries(attributes)) {
-      element.setAttribute(name, value);
-    }
-    return element;
-  }
-
   function icon(name) {
     const element = svgElement('svg', { class: 'icon', 'aria-hidden': 'true' });
     element.append(svgElement('use', { href: '#i-' + name }));
     return element;
   }
 
-  function boardShape(board, attributes) {
-    if (board.shape === 'circle') return svgElement('circle', { r: board.width / 2, ...attributes });
-    return svgElement('rect', {
-      x: -board.width / 2, y: -board.height / 2, width: board.width, height: board.height,
-      rx: board.shape === 'rounded' ? board.radius : 0, ...attributes
-    });
-  }
-
-  function pieceShape(piece, tile, attributes) {
-    const halfWidth = tile.width / 2;
-    const halfHeight = tile.height / 2;
-    const transform = 'translate(' + piece.x + ' ' + piece.y + ') rotate(' + piece.angle + ')';
-    const props = { transform, ...attributes };
-    if (tile.shape === 'circle') return svgElement('circle', { r: halfWidth, ...props });
-    if (tile.shape === 'triangle') return svgElement('polygon', {
-      points: '0,' + -halfHeight + ' ' + halfWidth + ',' + halfHeight + ' ' + -halfWidth + ',' + halfHeight,
-      ...props
-    });
-    return svgElement('rect', { x: -halfWidth, y: -halfHeight, width: tile.width, height: tile.height, ...props });
-  }
-
-  function renderBoard() {
-    const { board, grid } = project;
-    const pattern = byId('grid-pattern');
-    const lines = byId('grid-lines');
-    const offset = -grid.size / 2;
-    pattern.setAttribute('x', offset);
-    pattern.setAttribute('y', offset);
-    pattern.setAttribute('width', grid.size);
-    pattern.setAttribute('height', grid.size);
-    lines.setAttribute('d', 'M0 0V' + grid.size + 'H' + grid.size + 'V0H0Z');
-    lines.setAttribute('stroke-width', grid.weight);
-
-    layers.board.replaceChildren(boardShape(board, { class: 'board-shadow', fill: '#fdfbf3' }));
-    byId('board-clip').replaceChildren(boardShape(board, {}));
-    layers.grid.replaceChildren();
-    if (grid.visible) layers.grid.append(boardShape(board, { fill: 'url(#grid-pattern)' }));
-    layers.grid.append(boardShape(board, { class: 'board-outline', fill: 'none' }));
-  }
-
   function selectedReference() {
     return project.references.find(reference => reference.id === activeReferenceId);
-  }
-
-  function paintReference(reference) {
-    const element = referenceElements.get(reference.id);
-    const height = reference.width * reference.pixelHeight / reference.pixelWidth;
-    element.setAttribute('x', reference.x - reference.width / 2);
-    element.setAttribute('y', reference.y - height / 2);
-    element.setAttribute('width', reference.width);
-    element.setAttribute('height', height);
-    element.setAttribute('opacity', reference.opacity);
-    element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
   }
 
   function renderReferences() {
@@ -337,7 +277,7 @@
         const element = previous.get(reference.id) || svgElement('image', { 'data-reference': reference.id });
         if (element.getAttribute('href') !== reference.source) element.setAttribute('href', reference.source);
         referenceElements.set(reference.id, element);
-        paintReference(reference);
+        paintReference(element, reference);
         fragment.append(element);
       }
       layers.references.replaceChildren(fragment);
@@ -481,7 +421,7 @@
       const reference = selectedReference();
       if (!reference || gesture) return;
       const amount = event.target.valueAsNumber;
-      paintReference({ ...reference, opacity: amount / 100 });
+      paintReference(referenceElements.get(reference.id), { ...reference, opacity: amount / 100 });
       byId('reference-opacity-value').textContent = I18n.percent(amount / 100);
     });
     byId('reference-opacity').addEventListener('change', event => {
@@ -875,7 +815,7 @@
   function renderAll() {
     layers.preview.replaceChildren();
     renderSettings();
-    renderBoard();
+    renderBoard(project, layers);
     renderReferences();
     renderPieces();
     renderLibrary();
@@ -1308,7 +1248,7 @@
       const x = Math.max(-limit, Math.min(limit, reference.x + (point.x - origin.x)));
       const y = Math.max(-limit, Math.min(limit, reference.y + (point.y - origin.y)));
       current.position = { x, y };
-      paintReference({ ...reference, ...current.position });
+      paintReference(referenceElements.get(reference.id), { ...reference, ...current.position });
     } else if (current.kind === 'erase') {
       if (point.x === current.previous.x && point.y === current.previous.y) return;
       for (const piece of placementIndex.piecesAlong(current.previous, point)) erasePiece(current, piece.id);
@@ -1354,7 +1294,7 @@
     }
     if (current.kind === 'reference') {
       if (event.type === 'pointerup' && current.position) editReference(current.reference, current.position);
-      else paintReference(current.reference);
+      else paintReference(referenceElements.get(current.reference.id), current.reference);
       return;
     }
     if (current.kind === 'erase') {
@@ -1449,7 +1389,7 @@
     const file = input.files[0];
     input.value = '';
     if (!file) return;
-    if (file.size > MAX_PROJECT_FILE) {
+    if (file.size > Model.MAX_PROJECT_FILE) {
       notify('projectFileTooLarge');
       return;
     }

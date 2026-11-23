@@ -25,6 +25,12 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 
 The browser stores your most recent project locally when its settings allow it. **Save** downloads the project and its tile library as a JSON file. Use **Open** to load that file into the editor on any device.
 
+## Read-only viewer
+
+Open [viewer.html](viewer.html) in Safari, including on iOS 12, and choose **Open project** to select a saved `.mosaic.json` file. On iOS, open the viewer from a web server and pick the file from the Files app. The browser opens the file locally. The viewer shows the board, placed tiles, visible guide grid and reference images. Use **+** to zoom in, swipe to scroll the enlarged board, and use **Fit to view** to see the whole board again.
+
+To open a specific plan automatically, put its JSON file on the same web server as the viewer. For a file named `plan.mosaic.json` in the same folder, open `viewer.html?project=plan.mosaic.json`. Anyone who can access the JSON URL can read the project and its embedded reference images.
+
 ## Keyboard shortcuts
 
 | Key | Action |

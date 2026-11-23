@@ -5,6 +5,7 @@
   const MAX_PIECES = 12000;
   const MAX_TYPES = 200;
   const MAX_STROKE = 2500;
+  const MAX_PROJECT_FILE = 32 * 1024 * 1024;
   const MAX_REFERENCES = 8;
   const MAX_REFERENCE_FILE = 12 * 1024 * 1024;
   const MAX_REFERENCE_DATA = 24 * 1024 * 1024;
@@ -187,7 +188,7 @@
       this.geometries = [];
       this.largeGeometries = [];
       for (const piece of project.pieces) {
-        if (!excludedIds?.has(piece.id)) this.add(this.geometry(piece));
+        if (!excludedIds || !excludedIds.has(piece.id)) this.add(this.geometry(piece));
       }
     }
 
@@ -310,12 +311,13 @@
   }
 
   function demoProject(name = 'Kompassiruusu', names = {}) {
+    const tileName = (key, fallback) => names[key] == null ? fallback : names[key];
     const project = blankProject([
-      { id: 'spruce', name: names.spruce ?? 'Kuusenvihreä', color: '#285b52' },
-      { id: 'jade', name: names.jade ?? 'Salvia', color: '#75a18a' },
-      { id: 'sand', name: names.sand ?? 'Hiekka', color: '#e5ca9e' },
-      { id: 'clay', name: names.clay ?? 'Terrakotta', color: '#bb684e' },
-      { id: 'ivory', name: names.ivory ?? 'Luonnonvalkoinen', color: '#f9f0d9' }
+      { id: 'spruce', name: tileName('spruce', 'Kuusenvihreä'), color: '#285b52' },
+      { id: 'jade', name: tileName('jade', 'Salvia'), color: '#75a18a' },
+      { id: 'sand', name: tileName('sand', 'Hiekka'), color: '#e5ca9e' },
+      { id: 'clay', name: tileName('clay', 'Terrakotta'), color: '#bb684e' },
+      { id: 'ivory', name: tileName('ivory', 'Luonnonvalkoinen'), color: '#f9f0d9' }
     ].map(tile => ({ ...tile, shape: 'rectangle', width: 10, height: 10 })), name);
 
     const rows = [
@@ -486,7 +488,7 @@
       let tags;
       try {
         tags = tile.tags === undefined ? [] : normalizeTileTags(tile.tags);
-      } catch {
+      } catch (tagError) {
         throw new ValidationError(error);
       }
       tileTypes.set(tile.id, {
@@ -519,7 +521,7 @@
   }
 
   const model = {
-    MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
+    MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, PlacementIndex, ValidationError, angleInDegrees, blankProject, colorFamilies, demoProject,
     fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
     referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, validNumber, validReferenceDimensions
