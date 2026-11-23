@@ -4,10 +4,13 @@
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
   const I18n = window.MosaicI18n;
-  const { svgElement, pieceShape, renderGrout, renderBoard, paintReference } = window.MosaicBoard;
+  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, paintReference } = window.MosaicBoard;
   const t = I18n.text;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
+  const guideTools = new Map([['guideLine', 'line'], ['guideSquare', 'square'], ['guideCircle', 'circle']]);
+  const gridChecks = { visible: 'grid-visible', guidesVisible: 'guides-visible', snap: 'grid-snap', snapTiles: 'tile-snap' };
+  const SNAP_PIXELS = 8;
   const colorFamilies = [
     'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'white', 'gray', 'black'
   ];
@@ -22,6 +25,7 @@
     grid: byId('grid-layer'),
     grout: byId('grout-layer'),
     pieces: byId('piece-layer'),
+    guides: byId('guide-layer'),
     preview: byId('preview-layer'),
     selection: byId('selection-layer')
   };
@@ -71,6 +75,7 @@
   let feedbackMessages;
   let feedbackValues;
   let zoom = 1;
+  let snapDistance = 0;
   let viewCenter = { x: 0, y: 0 };
   let idSequence = 0;
 
@@ -428,8 +433,7 @@
     if (seamColorInput && seamColor) seamColorInput.value = seamColor;
     byId('grid-size').value = grid.size;
     byId('grid-weight').value = grid.weight;
-    byId('grid-visible').checked = grid.visible;
-    byId('grid-snap').checked = grid.snap;
+    for (const [key, id] of Object.entries(gridChecks)) byId(id).checked = grid[key];
   }
 
   function renderBoardWidthLabel() {
@@ -719,11 +723,13 @@
 
   function renderView() {
     const { board } = project;
-    const aspect = stage.clientWidth / Math.max(1, stage.clientHeight);
+    const screenWidth = stage.clientWidth;
+    const aspect = screenWidth / Math.max(1, stage.clientHeight);
     if (!aspect) return;
     const margin = Math.max(board.width, board.height) * .12;
     const width = Math.max(board.width + margin, (board.height + margin) * aspect) / zoom;
     const height = width / aspect;
+    snapDistance = SNAP_PIXELS * width / screenWidth;
     canvas.setAttribute('viewBox', [
       viewCenter.x - width / 2, viewCenter.y - height / 2, width, height
     ].join(' '));
@@ -745,9 +751,16 @@
     byId('redo').disabled = future.length === 0;
   }
 
+  function toolAvailable(name) {
+    if (tileTools.has(name)) return Boolean(activeTileId);
+    if (guideTools.has(name)) return project.guides.length < Model.MAX_GUIDES;
+    if (name === 'guideErase') return project.grid.guidesVisible && project.guides.length > 0;
+    if (name === 'reference') return Boolean(selectedReference()?.visible);
+    return true;
+  }
+
   function setTool(name) {
-    if (gesture || (!activeTileId && tileTools.has(name)) ||
-        (name === 'reference' && !selectedReference()?.visible)) return;
+    if (gesture || !toolAvailable(name)) return;
     tool = name;
     drawHover = undefined;
     if (name !== 'select') {
@@ -759,14 +772,11 @@
   }
 
   function renderTools() {
-    if (!activeTileId && tileTools.has(tool)) tool = 'select';
-    const canMoveReference = Boolean(selectedReference()?.visible);
-    if (!canMoveReference && tool === 'reference') tool = 'select';
+    if (!toolAvailable(tool)) tool = 'select';
     stage.dataset.tool = tool;
     document.querySelectorAll('[data-tool].tool').forEach(button => {
       button.setAttribute('aria-pressed', button.dataset.tool === tool);
-      button.disabled = (!activeTileId && tileTools.has(button.dataset.tool)) ||
-        (!canMoveReference && button.dataset.tool === 'reference');
+      button.disabled = !toolAvailable(button.dataset.tool);
     });
     byId('tool-name').textContent = t(tool);
     const showRotation = tool === 'draw' && Boolean(drawRotation);
@@ -847,8 +857,8 @@
     for (const key of ['size', 'weight']) {
       numericChange('grid-' + key, () => project.grid[key], value => changeGrid(key, value));
     }
-    for (const key of ['visible', 'snap']) {
-      const input = byId('grid-' + key);
+    for (const [key, id] of Object.entries(gridChecks)) {
+      const input = byId(id);
       input.addEventListener('change', () => changeGrid(key, input.checked));
     }
   }
@@ -995,26 +1005,28 @@
     return point.matrixTransform(matrix.inverse());
   }
 
-  function snap(point) {
-    if (!project.grid.snap) return { x: point.x, y: point.y };
-    const size = project.grid.size;
-    return {
-      x: (Math.round(point.x / size + .5) - .5) * size,
-      y: (Math.round(point.y / size + .5) - .5) * size
-    };
+  function snappedGeometry(piece, index = placementIndex, accepts = candidate => index.accepts(candidate)) {
+    const guide = Model.snapToGuide(project, piece, snapDistance);
+    const guided = index.geometry({ ...piece, x: guide.x, y: guide.y });
+    if (!project.grid.snapTiles) return guided;
+    const distance = guide !== piece && accepts(guided) ?
+      Math.hypot(guide.x - piece.x, guide.y - piece.y) : snapDistance;
+    const original = guide === piece ? guided : index.geometry(piece);
+    return index.snapToTiles(original, distance, accepts) || guided;
   }
 
   function pieceAt(center, tile, angle) {
     return { tileId: tile.id, x: center.x, y: center.y, angle };
   }
 
-  function placeCandidate(action, point, snapToGrid) {
+  function placeCandidate(action, point, useSnapping) {
     if (action.placed.length >= action.limit) return;
-    const candidate = pieceAt(snapToGrid ? snap(point) : point, action.tile, action.angle);
-    const geometry = action.index.geometry(candidate);
+    const candidate = pieceAt(point, action.tile, action.angle);
+    const geometry = useSnapping ?
+      snappedGeometry(candidate, placementIndex, target => action.index.accepts(target)) : action.index.geometry(candidate);
     if (!action.index.accepts(geometry)) return;
     action.index.add(geometry);
-    action.placed.push(candidate);
+    action.placed.push(geometry.piece);
   }
 
   function placementAction(tile, { angle = 0, limit = Model.MAX_STROKE } = {}) {
@@ -1051,12 +1063,13 @@
   function previewDrawPlacement(point, action) {
     const tile = action?.tile ?? placementIndex.tileTypes.get(activeTileId);
     const index = action?.index ?? placementIndex;
-    const piece = pieceAt(snap(point), tile, action?.angle ?? drawAngle);
     const last = action && action.placed[action.placed.length - 1];
-    const placedHere = last && Math.hypot(piece.x - last.x, piece.y - last.y) < 1e-7;
-    const blocked = !placedHere && !index.accepts(index.geometry(piece));
-    const pieces = action?.placed ?? (blocked ? [] : [piece]);
-    previewPieces(pieces, tile, { blocked: blocked ? piece : undefined });
+    const accepts = geometry => (last && Math.hypot(geometry.piece.x - last.x, geometry.piece.y - last.y) < 1e-7) ||
+      index.accepts(geometry);
+    const geometry = snappedGeometry(pieceAt(point, tile, action?.angle ?? drawAngle), placementIndex, accepts);
+    const blocked = !accepts(geometry);
+    const pieces = action?.placed ?? (blocked ? [] : [geometry.piece]);
+    previewPieces(pieces, tile, { blocked: blocked ? geometry.piece : undefined });
   }
 
   function previewDrawHover(event) {
@@ -1070,7 +1083,7 @@
       notify('tooManyTiles');
       return;
     }
-    const start = snap(point);
+    const start = snappedGeometry(pieceAt(point, tile, action.angle)).piece;
     const horizontal = tile.width + project.seam;
     const vertical = tile.height + project.seam;
     const queue = [[0, 0]];
@@ -1143,6 +1156,15 @@
       if (!gesture) return;
     } else if (tool === 'reference') {
       gesture = { kind: 'reference', origin: point, reference: selectedReference() };
+    } else if (guideTools.has(tool)) {
+      gesture = { kind: 'guide', start: point, shape: guideTools.get(tool) };
+    } else if (tool === 'guideErase') {
+      const nearest = Model.nearestGuide(project.guides, point, snapDistance);
+      if (nearest) {
+        const guides = project.guides.filter((guide, index) => index !== nearest.index);
+        commit({ ...project, guides });
+      }
+      return;
     } else if (tool === 'erase') {
       gesture = { kind: 'erase', previous: point, erased: new Set() };
       const element = event.target.closest('[data-piece]');
@@ -1160,7 +1182,7 @@
       gesture = { kind: 'draw', previous: point, phase: 1, action };
       previewDrawPlacement(point, action);
     } else {
-      gesture = { kind: tool, start: snap(point), lastPoint: point, tile };
+      gesture = { kind: tool, start: snappedGeometry(pieceAt(point, tile, 0)).piece, lastPoint: point, tile };
     }
     gesture.pointerId = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
@@ -1173,8 +1195,9 @@
     markPiece(id, 'erased-piece', true);
   }
 
-  function drawingGuide(current, end) {
+  function drawingGuide(current, point) {
     const { start, tile } = current;
+    const end = snappedGeometry(pieceAt(point, tile, 0)).piece;
     if (current.kind === 'line') {
       const spacing = Model.lineSpacing(tile, project.seam, start, end);
       return { path: [start, end], points: Model.sampleSegment(start, end, spacing).points };
@@ -1201,6 +1224,13 @@
     return { ...piece, x: piece.x + x, y: piece.y + y };
   }
 
+  function selectionAcceptsPlacement({ anchor, pieces, index }, candidate) {
+    const offset = { x: candidate.piece.x - anchor.x, y: candidate.piece.y - anchor.y };
+    if (!offset.x && !offset.y) return true;
+    return index.accepts(candidate) && pieces.every(piece => piece.id === anchor.id ||
+      index.accepts(index.geometry(translatePiece(piece, offset))));
+  }
+
   function previewMove(current, point) {
     const { anchor, origin, pieces } = current;
     const dx = point.x - origin.x;
@@ -1210,12 +1240,13 @@
       current.index = new Model.PlacementIndex(project, selectedIds);
       for (const piece of pieces) markPiece(piece.id, 'moving-piece', true);
     }
-    const position = snap({ x: anchor.x + dx, y: anchor.y + dy });
+    const accepts = candidate => selectionAcceptsPlacement(current, candidate);
+    const candidate = snappedGeometry(translatePiece(anchor, { x: dx, y: dy }), current.index, accepts);
+    const position = candidate.piece;
     const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
     if (offset.x === current.offset?.x && offset.y === current.offset?.y) return;
     current.offset = offset;
-    current.valid = (!offset.x && !offset.y) || pieces.every(piece =>
-      current.index.accepts(current.index.geometry(translatePiece(piece, offset))));
+    current.valid = accepts(candidate);
     layers.selection.setAttribute('transform', 'translate(' + offset.x + ' ' + offset.y + ')');
     layers.selection.classList.toggle('invalid-selection', !current.valid);
   }
@@ -1248,6 +1279,10 @@
       previewMove(current, point);
     } else if (current.kind === 'marquee') {
       updateMarquee(current, point);
+    } else if (current.kind === 'guide') {
+      current.guide = Model.guideFromDrag(current.shape, current.start, point);
+      layers.preview.replaceChildren();
+      if (current.guide) layers.preview.append(guideShape(current.guide, { 'stroke-opacity': .65 }));
     } else if (current.kind === 'reference') {
       const limit = Model.REFERENCE_POSITION_LIMIT;
       const { origin, reference } = current;
@@ -1270,7 +1305,7 @@
       previewDrawPlacement(point, action);
     } else {
       current.lastPoint = point;
-      const guide = drawingGuide(current, snap(point));
+      const guide = drawingGuide(current, point);
       const action = placementAction(current.tile, { limit: 350 });
       for (const center of guide.points) placeCandidate(action, center, true);
       previewPieces(action.placed, current.tile, { path: guide.path });
@@ -1280,6 +1315,11 @@
   function movePointer(event) {
     if (gesture) updateGesture(event);
     else if (tool === 'draw' && !spacePressed) previewDrawHover(event);
+    else if (tool === 'guideErase' && !spacePressed) {
+      const nearest = Model.nearestGuide(project.guides, surfacePoint(event), snapDistance);
+      layers.preview.replaceChildren();
+      if (nearest) layers.preview.append(guideShape(project.guides[nearest.index], { stroke: '#a34032' }));
+    }
   }
 
   function endPointer(event) {
@@ -1313,6 +1353,14 @@
       return;
     }
     if (event.type !== 'pointerup' || current.kind === 'pan') return;
+    if (current.kind === 'guide') {
+      if (current.guide) commit({
+        ...project,
+        grid: { ...project.grid, guidesVisible: true },
+        guides: [...project.guides, current.guide]
+      });
+      return;
+    }
     if (current.kind === 'draw') {
       if (current.action.placed.length) finishPlacement(current.action);
       else {
@@ -1321,7 +1369,7 @@
       }
       return;
     }
-    const guide = drawingGuide(current, snap(current.lastPoint));
+    const guide = drawingGuide(current, current.lastPoint);
     const action = placementAction(current.tile);
     for (const point of guide.points) placeCandidate(action, point, true);
     if (action.placed.length) finishPlacement(action);
@@ -1569,7 +1617,7 @@
   byId('zoom-out').addEventListener('click', () => changeZoom(.8));
   byId('zoom-fit').addEventListener('click', resetView);
   byId('new-project').addEventListener('click', () => {
-    if (project.pieces.length || project.references.length) {
+    if (project.pieces.length || project.references.length || project.guides.length) {
       newDialog.returnValue = '';
       newDialog.showModal();
     } else newProject();

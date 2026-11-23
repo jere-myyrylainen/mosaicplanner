@@ -14,7 +14,8 @@
     references: byId('reference-layer'),
     grid: byId('grid-layer'),
     grout: byId('grout-layer'),
-    pieces: byId('piece-layer')
+    pieces: byId('piece-layer'),
+    guides: byId('guide-layer')
   };
   let project;
   let zoomStep = 0;

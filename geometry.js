@@ -6,6 +6,8 @@
   const MAX_TYPES = 200;
   const MAX_STROKE = 2500;
   const MAX_PROJECT_FILE = 32 * 1024 * 1024;
+  const MAX_GUIDES = 500;
+  const GUIDE_LIMIT = 50000;
   const MAX_REFERENCES = 8;
   const MAX_REFERENCE_FILE = 12 * 1024 * 1024;
   const MAX_REFERENCE_DATA = 24 * 1024 * 1024;
@@ -101,13 +103,112 @@
     return pointInBoard(inset, piece);
   }
 
+  function segmentFraction(point, start, dx, dy) {
+    if (!dx && !dy) return 0;
+    const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
+    return Math.max(0, Math.min(1, projection));
+  }
+
   function minSegmentDistanceSquared(point, start, end) {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
-    if (dx === 0 && dy === 0) return (point.x - start.x) ** 2 + (point.y - start.y) ** 2;
-    const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
-    const t = Math.max(0, Math.min(1, projection));
+    const t = segmentFraction(point, start, dx, dy);
     return (point.x - start.x - t * dx) ** 2 + (point.y - start.y - t * dy) ** 2;
+  }
+
+  function readGuide(guide) {
+    const validCoordinate = value => validNumber(value, -GUIDE_LIMIT, GUIDE_LIMIT);
+    if (!guide || !validCoordinate(guide.x) || !validCoordinate(guide.y)) return;
+    const { shape, x, y } = guide;
+    if (shape === 'line' && validCoordinate(guide.endX) && validCoordinate(guide.endY) &&
+        Math.hypot(guide.endX - x, guide.endY - y) > EPSILON) {
+      return { shape, x, y, endX: guide.endX, endY: guide.endY };
+    }
+    if (shape === 'square' && validNumber(guide.size, EPSILON, GUIDE_LIMIT * 2) &&
+        validCoordinate(x + guide.size) && validCoordinate(y + guide.size)) {
+      return { shape, x, y, size: guide.size };
+    }
+    if (shape === 'circle' && validNumber(guide.radius, EPSILON, GUIDE_LIMIT * 2)) {
+      return { shape, x, y, radius: guide.radius };
+    }
+  }
+
+  function guideFromDrag(shape, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (shape === 'line') return readGuide({ shape, x: start.x, y: start.y, endX: end.x, endY: end.y });
+    if (shape === 'circle') return readGuide({ shape, x: start.x, y: start.y, radius: Math.hypot(dx, dy) });
+    const size = Math.max(Math.abs(dx), Math.abs(dy));
+    return readGuide({
+      shape, size, x: start.x - (dx < 0 ? size : 0), y: start.y - (dy < 0 ? size : 0)
+    });
+  }
+
+  function projectOntoGuide(point, guide) {
+    const { x, y } = guide;
+    if (guide.shape === 'line') {
+      const dx = guide.endX - x;
+      const dy = guide.endY - y;
+      const fraction = segmentFraction(point, guide, dx, dy);
+      return { x: x + fraction * dx, y: y + fraction * dy };
+    }
+    if (guide.shape === 'circle') {
+      const dx = point.x - x;
+      const dy = point.y - y;
+      const distance = Math.hypot(dx, dy);
+      if (!distance) return { x: x + guide.radius, y };
+      return { x: x + dx / distance * guide.radius, y: y + dy / distance * guide.radius };
+    }
+    const right = x + guide.size;
+    const bottom = y + guide.size;
+    const clampedX = Math.max(x, Math.min(right, point.x));
+    const clampedY = Math.max(y, Math.min(bottom, point.y));
+    if (clampedX !== point.x || clampedY !== point.y) return { x: clampedX, y: clampedY };
+
+    const edgeX = point.x - x <= right - point.x ? x : right;
+    const edgeY = point.y - y <= bottom - point.y ? y : bottom;
+    if (Math.abs(point.x - edgeX) <= Math.abs(point.y - edgeY)) return { x: edgeX, y: point.y };
+    return { x: point.x, y: edgeY };
+  }
+
+  function nearestGuide(guides, point, limit) {
+    let nearest;
+    let bestDistance = limit;
+    // Prefer the most recently drawn guide when two guides are equally close.
+    for (let index = guides.length - 1; index >= 0; index--) {
+      const candidate = projectOntoGuide(point, guides[index]);
+      const distance = Math.hypot(candidate.x - point.x, candidate.y - point.y);
+      if (distance > bestDistance || (nearest && distance === bestDistance)) continue;
+      nearest = { index, point: candidate };
+      bestDistance = distance;
+    }
+    return nearest;
+  }
+
+  function snapToGuide({ board, grid, guides }, point, distance) {
+    if (!grid.snap) return point;
+    let target = point;
+    if (grid.visible) {
+      const { size } = grid;
+      // Project onto one axis at a time, matching the pattern origin in renderBoard.
+      const gridLine = coordinate => (Math.round(coordinate / size + .5) - .5) * size;
+      const x = gridLine(point.x);
+      const y = gridLine(point.y);
+      const dx = Math.abs(x - point.x);
+      const dy = Math.abs(y - point.y);
+      const vertical = { x, y: point.y };
+      const horizontal = { x: point.x, y };
+      if (dx <= distance && pointInBoard(board, vertical)) {
+        target = vertical;
+        distance = dx;
+      }
+      if ((target === point ? dy <= distance : dy < distance) && pointInBoard(board, horizontal)) {
+        target = horizontal;
+        distance = dy;
+      }
+    }
+    const nearest = grid.guidesVisible && nearestGuide(guides, point, distance);
+    return nearest ? nearest.point : target;
   }
 
   function sideOfEdge(start, end, point) {
@@ -184,6 +285,62 @@
         edgesWithinDistance(second.points, first.points, distance));
   }
 
+  function convexHull(points) {
+    points.sort((a, b) => a.x - b.x || a.y - b.y);
+    function halfHull(sorted) {
+      const hull = [];
+      for (const point of sorted) {
+        while (hull.length >= 2 && sideOfEdge(hull[hull.length - 2], hull[hull.length - 1], point) <= 0) {
+          hull.pop();
+        }
+        hull.push(point);
+      }
+      hull.pop();
+      return hull;
+    }
+    return halfHull(points).concat(halfHull(points.reverse()));
+  }
+
+  function* tileContacts(moving, fixed, gap) {
+    const center = moving.piece;
+    const radius = gap + (moving.radius || 0) + (fixed.radius || 0);
+    if (moving.radius && fixed.radius) {
+      yield projectOntoGuide(center, { shape: 'circle', x: fixed.piece.x, y: fixed.piece.y, radius });
+      return;
+    }
+
+    // The hull of the vertex differences bounds the moving center at contact.
+    // Round that outline by the grout gap and by either tile's circular radius.
+    const differences = [];
+    for (const a of fixed.points || [fixed.piece]) {
+      for (const b of moving.points || [center]) {
+        differences.push({ x: a.x + (center.x - b.x), y: a.y + (center.y - b.y) });
+      }
+    }
+    const outline = convexHull(differences);
+    for (let i = 0; i < outline.length; i++) {
+      const start = outline[i];
+      const end = outline[(i + 1) % outline.length];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      if (!length) continue;
+      const shifted = { x: start.x + dy / length * radius, y: start.y - dx / length * radius };
+      const fraction = segmentFraction(center, shifted, dx, dy);
+      yield { x: shifted.x + fraction * dx, y: shifted.y + fraction * dy };
+
+      if (!radius) continue;
+      const previous = outline[(i + outline.length - 1) % outline.length];
+      const x = center.x - start.x;
+      const y = center.y - start.y;
+      // The corner arc faces away from both incident edges.
+      if (x * dx + y * dy <= 0 && x * (previous.x - start.x) + y * (previous.y - start.y) <= 0) {
+        const distance = Math.hypot(x, y);
+        if (distance) yield { x: start.x + x / distance * radius, y: start.y + y / distance * radius };
+      }
+    }
+  }
+
   function cellsInBounds(geometry, margin = 0) {
     const x = Math.floor((geometry.minX - margin) / CELL_SIZE);
     const y = Math.floor((geometry.minY - margin) / CELL_SIZE);
@@ -244,6 +401,25 @@
         if (tooClose(geometry, other, this.gap)) return false;
       }
       return true;
+    }
+
+    snapToTiles(geometry, limit, accepts = candidate => this.accepts(candidate)) {
+      let nearest;
+      let bestDistance = limit;
+      const margin = this.gap + limit;
+      for (const other of this.nearby(geometry, margin)) {
+        if (geometry.maxX + margin < other.minX || other.maxX + margin < geometry.minX ||
+            geometry.maxY + margin < other.minY || other.maxY + margin < geometry.minY) continue;
+        for (const { x, y } of tileContacts(geometry, other, this.gap)) {
+          const distance = Math.hypot(x - geometry.piece.x, y - geometry.piece.y);
+          if (distance > bestDistance || (nearest && distance === bestDistance)) continue;
+          const candidate = this.geometry({ ...geometry.piece, x, y });
+          if (!accepts(candidate)) continue;
+          nearest = candidate;
+          bestDistance = distance;
+        }
+      }
+      return nearest;
     }
 
     *piecesAlong(start, end) {
@@ -328,7 +504,8 @@
       board: { shape: 'circle', width: 200, height: 200, radius: 18 },
       seam: 2,
       seamColor: DEFAULT_SEAM_COLOR,
-      grid: { visible: true, size: 12, weight: 0.2, snap: false },
+      grid: { visible: true, size: 12, weight: 0.2, snap: false, snapTiles: false, guidesVisible: true },
+      guides: [],
       tiles,
       pieces: [],
       references: []
@@ -496,16 +673,19 @@
   function readProject(value) {
     const error = 'invalidProject';
     if (!value || value.version !== 1 || !validText(value.name, 80)) throw new ValidationError(error);
-    const { board, grid, tiles, pieces, seam, seamColor = DEFAULT_SEAM_COLOR } = value;
+    const { board, grid, guides = [], tiles, pieces, seam, seamColor = DEFAULT_SEAM_COLOR } = value;
     if (!board || !boardShapes.includes(board.shape) ||
         !validNumber(board.width, 1, 10000) || !validNumber(board.height, 1, 10000) ||
         !validNumber(board.radius, 0, Math.min(board.width, board.height) / 2) ||
         (board.shape === 'circle' && board.width !== board.height) ||
         !validNumber(seam, 0, 100) || !validColor(seamColor) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
-        !validNumber(grid.weight, .1, 10)) throw new ValidationError(error);
+        !validNumber(grid.weight, .1, 10) ||
+        (grid.snapTiles !== undefined && typeof grid.snapTiles !== 'boolean') ||
+        (grid.guidesVisible !== undefined && typeof grid.guidesVisible !== 'boolean')) throw new ValidationError(error);
     if (!Array.isArray(tiles) || tiles.length > MAX_TYPES ||
-        !Array.isArray(pieces) || pieces.length > MAX_PIECES) throw new ValidationError(error);
+        !Array.isArray(pieces) || pieces.length > MAX_PIECES ||
+        !Array.isArray(guides) || guides.length > MAX_GUIDES) throw new ValidationError(error);
 
     const tileTypes = new Map();
     for (const tile of tiles) {
@@ -535,7 +715,15 @@
     const restored = blankProject([...tileTypes.values()]);
     restored.name = value.name.trim();
     restored.board = { shape: board.shape, width: board.width, height: board.height, radius: board.radius };
-    restored.grid = { visible: grid.visible, size: grid.size, weight: grid.weight, snap: grid.snap };
+    restored.grid = {
+      visible: grid.visible, size: grid.size, weight: grid.weight, snap: grid.snap,
+      snapTiles: grid.snapTiles === true, guidesVisible: grid.guidesVisible !== false
+    };
+    for (const guide of guides) {
+      const clean = readGuide(guide);
+      if (!clean) throw new ValidationError(error);
+      restored.guides.push(clean);
+    }
     restored.seam = seam;
     restored.seamColor = seamColor.toLowerCase();
     if (value.references !== undefined) restored.references = readReferences(value.references);
@@ -555,10 +743,10 @@
   }
 
   const model = {
-    MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
+    MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, colorFamilies, demoProject,
-    fitsBoard, lineSpacing, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    fitsBoard, guideFromDrag, lineSpacing, nearestGuide, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
+    referenceWidthLimit, sampleOutline, sampleSegment, snapToGuide, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions
   };
 

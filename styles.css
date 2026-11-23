@@ -129,6 +129,7 @@ legend, .field, .check-field { font-size: .875rem; font-weight: 600; }
   min-height: 56px; padding: .5rem .8rem; background: var(--paper); border-bottom: 1px solid var(--line);
 }
 .toolbar-divider { width: 1px; height: 21px; background: var(--line); flex: none; }
+.guide-tools .tool { color: #345794; }
 .tool[aria-pressed="true"] { background: var(--active); color: var(--accent); border-color: #c8ded0; }
 .tool-name { margin-left: auto; color: var(--muted); font-size: .875rem; font-weight: 600; }
 select {
@@ -148,7 +149,7 @@ select {
 #canvas [data-piece] { pointer-events: visiblePainted; }
 .stage[data-tool="draw"] #canvas, .stage[data-tool="line"] #canvas, .stage[data-tool="select"] #canvas,
 .stage[data-tool="shape"] #canvas, .stage[data-tool="fill"] #canvas,
-.stage[data-tool="erase"] #canvas { cursor: crosshair; }
+.stage[data-tool="erase"] #canvas, .stage[data-tool^="guide"] #canvas { cursor: crosshair; }
 .stage[data-tool="select"] #canvas [data-piece] { cursor: move; }
 .stage[data-tool="reference"] #canvas { cursor: move; }
 .stage[data-tool="erase"]:not(.pan-ready):not(.is-panning) .piece-face:hover { stroke: #a34032; stroke-width: 2; }

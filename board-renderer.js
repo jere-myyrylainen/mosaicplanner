@@ -32,6 +32,17 @@
     return svgElement('rect', { x: -halfWidth, y: -halfHeight, width: tile.width, height: tile.height, ...props });
   }
 
+  function guideShape(guide, attributes) {
+    const { x, y } = guide;
+    const props = {
+      fill: 'none', stroke: '#345794', 'stroke-width': 1.5, 'stroke-dasharray': '5 4',
+      'vector-effect': 'non-scaling-stroke', ...attributes
+    };
+    if (guide.shape === 'line') return svgElement('line', { x1: x, y1: y, x2: guide.endX, y2: guide.endY, ...props });
+    if (guide.shape === 'circle') return svgElement('circle', { cx: x, cy: y, r: guide.radius, ...props });
+    return svgElement('rect', { x, y, width: guide.size, height: guide.size, ...props });
+  }
+
   function renderGrout({ pieces, seam, seamColor }, tileTypes, layer, elements) {
     if (!layer) return;
     if (elements) elements.clear();
@@ -52,7 +63,7 @@
     layer.appendChild(fragment);
   }
 
-  function renderBoard({ board, grid }, layers) {
+  function renderBoard({ board, grid, guides }, layers) {
     const pattern = document.getElementById('grid-pattern');
     const lines = document.getElementById('grid-lines');
     const clip = document.getElementById('board-clip');
@@ -71,6 +82,12 @@
     layers.grid.textContent = '';
     if (grid.visible) layers.grid.appendChild(boardShape(board, { fill: 'url(#grid-pattern)' }));
     layers.grid.appendChild(boardShape(board, { class: 'board-outline', fill: 'none' }));
+    layers.guides.textContent = '';
+    if (grid.guidesVisible) {
+      const fragment = document.createDocumentFragment();
+      for (const guide of guides) fragment.appendChild(guideShape(guide));
+      layers.guides.appendChild(fragment);
+    }
   }
 
   function paintReference(element, reference) {
@@ -83,5 +100,5 @@
     element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
   }
 
-  window.MosaicBoard = { svgElement, pieceShape, renderGrout, renderBoard, paintReference };
+  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, paintReference };
 }());
