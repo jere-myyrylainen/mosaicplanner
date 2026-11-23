@@ -76,6 +76,7 @@
     tileType: ["Palatyyppi", "Tile type"],
     quantity: ["Kpl", "Qty"],
     tileLibrary: ["Palakirjasto", "Tile library"],
+    expandLibrary: ["Avaa palakirjasto ruudukkona", "Open tile library grid"],
     libraryWidth: ["Palakirjaston leveys", "Tile library width"],
     libraryResize: ["Säädä leveyttä vetämällä. Palauta oletus kaksoisnapsauttamalla.", "Drag to resize. Double-click to reset."],
     addTile: ["Lisää pala", "Add tile"],

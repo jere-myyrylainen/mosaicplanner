@@ -65,25 +65,13 @@ h1 { margin: 0; font-size: 1.07rem; font-weight: 750; letter-spacing: -.035em; }
 .primary:hover { background: var(--accent-dark); }
 
 .editor {
-  --default-library-width: 252px;
   min-height: calc(100dvh - 68px); display: grid;
-  grid-template-columns: minmax(205px, 242px) minmax(0, 1fr) var(--library-width, var(--default-library-width));
+  grid-template-columns: minmax(205px, 242px) minmax(0, 1fr) 252px;
 }
 .sidebar { background: var(--paper); min-width: 0; }
 .settings { border-right: 1px solid var(--line); }
 .library {
-  position: relative; border-left: 1px solid var(--line); display: flex; flex-direction: column;
-}
-.library-resizer {
-  position: absolute; z-index: 3; inset: 0 auto 0 -6px; width: 11px; cursor: col-resize; touch-action: none;
-}
-.library-resizer::after {
-  content: ""; position: absolute; left: 2px; top: calc(50% - 20px); width: 7px; height: 40px;
-  border: 1px solid #b1c5b8; border-radius: 6px; background: #e2eee7;
-}
-.library-resizer:hover, .library-resizer:focus-visible, .library-resizer.is-resizing { background: #285e4d24; }
-.library-resizer:hover::after, .library-resizer:focus-visible::after, .library-resizer.is-resizing::after {
-  background: var(--accent); border-color: var(--accent);
+  border-left: 1px solid var(--line); display: flex; flex-direction: column;
 }
 .panel { padding: 1.25rem 1.15rem; }
 .panel + .panel { border-top: 1px solid var(--line); }
@@ -242,6 +230,9 @@ select {
 .reference-actions .tool[aria-pressed="true"] { border-color: #c8ded0; }
 
 .library-tools { margin-top: .75rem; border: 1px solid var(--line); border-radius: 8px; }
+.library-heading .icon-button { width: 30px; height: 30px; }
+#expand-library { border-color: var(--line); color: var(--accent); }
+#expand-library .icon { width: 1rem; height: 1rem; }
 .library-tools summary {
   display: flex; align-items: center; gap: .4rem; padding: .5rem .55rem;
   cursor: pointer; list-style: none; font-size: .875rem; font-weight: 650;
@@ -312,10 +303,12 @@ select {
   .settings { max-height: calc(100dvh - 68px); overflow-y: auto; }
   .library { max-height: calc(100dvh - 68px); }
   .library > .selected-panel, .library > .save-status { flex: none; }
-  .library-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
-  .library-panel > :not(.tile-list) { flex: none; }
-  .library-panel .tile-list { overflow-y: auto; }
-  .library-panel .tile-list:not(:empty) { min-height: 3.75rem; }
+  .library .library-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+  .library .library-heading { flex: none; }
+  .library .library-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .library .library-content > :not(.tile-list) { flex: none; }
+  .library .tile-list { overflow-y: auto; }
+  .library .tile-list:not(:empty) { min-height: 3.75rem; }
 }
 
 dialog {
@@ -323,6 +316,34 @@ dialog {
   color: var(--ink); background: var(--paper); box-shadow: 0 22px 80px #142c3840;
 }
 dialog::backdrop { background: #23342e65; }
+.library-dialog {
+  width: min(920px, calc(100% - 2rem)); max-height: calc(100% - 2rem); overflow: auto;
+}
+.library-dialog .library-content { padding: 0 1rem 1rem; }
+.library-dialog .library-heading {
+  position: sticky; top: 0; z-index: 1;
+  padding: .65rem 1rem; background: var(--paper); border-bottom: 1px solid var(--line);
+}
+.library-dialog .add-tile-text { width: auto; }
+.library-dialog .library-filters { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+.library-dialog .library-filters fieldset, .library-dialog .clear-filters { grid-column: 1 / -1; }
+.library-dialog .tile-list { grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .65rem; }
+.library-dialog .tile-row {
+  grid-template-columns: minmax(0, 1fr) 32px 32px; grid-template-rows: 1fr auto;
+  align-items: stretch; padding: .28rem; border-color: var(--line); background: #fff;
+}
+.library-dialog .tile-row.active, .library-dialog .tile-row:hover {
+  background: #edf4ed; border-color: #c9dfce;
+}
+.library-dialog .tile-choice {
+  grid-column: 1 / -1; flex-direction: column; align-items: flex-start; gap: .5rem;
+  min-height: 6.25rem; padding: .45rem;
+}
+.library-dialog .tile-swatch { width: 36px; height: 36px; }
+.library-dialog .tile-caption { width: 100%; }
+.library-dialog .edit-tile { grid-column: 2; }
+.library-dialog .remove-tile { grid-column: 3; }
+.library-dialog .edit-tile, .library-dialog .remove-tile { width: 32px; }
 dialog form { display: grid; gap: .95rem; padding: 1.25rem; }
 dialog form > p { margin: 0; color: var(--muted); }
 .dialog-heading, .dialog-actions { display: flex; align-items: center; gap: .4rem; }
@@ -335,10 +356,7 @@ dialog form > p { margin: 0; color: var(--muted); }
   background: #254037; color: white; box-shadow: 0 4px 15px #19352a28; font-size: .875rem;
 }
 @media (max-width: 990px) {
-  .editor {
-    --default-library-width: 190px;
-    grid-template-columns: 185px minmax(0, 1fr) var(--library-width, var(--default-library-width));
-  }
+  .editor { grid-template-columns: 185px minmax(0, 1fr) 190px; }
   .panel { padding-inline: .85rem; }
   .tool-name { display: none; }
 }
@@ -346,14 +364,10 @@ dialog form > p { margin: 0; color: var(--muted); }
   .app-header { grid-template-columns: minmax(0, 1fr) auto; padding-inline: .75rem; gap: .35rem .55rem; }
   .project-name { grid-row: 2; grid-column: 1; max-width: none; }
   .language-select { grid-row: 2; grid-column: 2; }
-  .editor {
-    --default-library-width: 50%;
-    grid-template-columns: minmax(0, 1fr) var(--library-width, var(--default-library-width)); min-height: 0;
-  }
+  .editor { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
   .workspace { grid-row: 1; grid-column: 1 / -1; grid-template-rows: auto minmax(330px, 60dvh) auto; }
   .sidebar { border-top: 1px solid var(--line); }
   .settings { border-right: 0; }
-  .library-resizer::after { top: 2.1rem; }
   .file-actions { gap: .12rem; }
 }
 @media (max-width: 460px) {
@@ -369,4 +383,5 @@ dialog form > p { margin: 0; color: var(--muted); }
   .panel { padding: .9rem .6rem; }
   .tile-choice { gap: .32rem; }
   .tile-swatch { width: 23px; height: 23px; }
+  .library-dialog .tile-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

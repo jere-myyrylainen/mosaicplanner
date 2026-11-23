@@ -7,15 +7,12 @@
   const { svgElement, pieceShape, renderGrout, renderBoard, paintReference } = window.MosaicBoard;
   const t = I18n.text;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
-  const LIBRARY_WIDTH_KEY = 'mosaic-planner.library-width';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
   const colorFamilies = [
     'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'white', 'gray', 'black'
   ];
 
   const byId = id => document.getElementById(id);
-  const editor = document.querySelector('.editor');
-  const settings = document.querySelector('.settings');
   const canvas = byId('canvas');
   const stage = byId('stage');
   const layers = {
@@ -36,9 +33,11 @@
   const drawRotation = byId('draw-rotation');
   const drawAngleInput = byId('draw-angle');
   const seamColorInput = byId('seam-color');
-  const library = byId('tile-library');
-  const libraryResizer = byId('library-resizer');
-  const stackedLayout = window.matchMedia('(max-width: 760px)');
+  const libraryPanel = byId('library-panel');
+  const libraryContent = byId('library-content');
+  const libraryDialog = byId('library-dialog');
+  const expandLibrary = byId('expand-library');
+  const closeLibrary = byId('close-library');
   const past = [];
   const future = [];
   const pieceElements = new Map();
@@ -58,8 +57,6 @@
   let renderedReferences;
   let addingReferences = false;
   let libraryOrder = restoreLibraryOrder();
-  let libraryWidth = restoreLibraryWidth();
-  let libraryResize = null;
   let librarySource;
   let availableTiles = [];
   let libraryTileColors = new Map();
@@ -88,116 +85,6 @@
       // The chosen order can still be used until the editor is closed.
     }
     return 'added';
-  }
-
-  function restoreLibraryWidth() {
-    try {
-      const width = Number(localStorage.getItem(LIBRARY_WIDTH_KEY));
-      if (Number.isFinite(width) && width > 0) return width;
-    } catch {
-      // The width can still be adjusted for this session.
-    }
-    return null;
-  }
-
-  function persistLibraryWidth() {
-    try {
-      if (libraryWidth === null) localStorage.removeItem(LIBRARY_WIDTH_KEY);
-      else localStorage.setItem(LIBRARY_WIDTH_KEY, libraryWidth);
-    } catch {
-      // The editor still uses the adjusted width when browser storage is unavailable.
-    }
-  }
-
-  function libraryWidthLimits() {
-    const stacked = stackedLayout.matches;
-    const min = stacked ? 144 : 178;
-    const reserved = stacked ? 144 : settings.offsetWidth + 330;
-    const max = Math.max(min, Math.min(640, editor.clientWidth - reserved));
-    return { min, max };
-  }
-
-  function clampLibraryWidth(width, { min, max }) {
-    return Math.round(Math.max(min, Math.min(width, max)));
-  }
-
-  function renderLibraryWidth() {
-    const limits = libraryWidthLimits();
-    if (libraryWidth === null) editor.style.removeProperty('--library-width');
-    else editor.style.setProperty('--library-width', clampLibraryWidth(libraryWidth, limits) + 'px');
-    const actualWidth = library.offsetWidth;
-    libraryResizer.setAttribute('aria-valuemin', limits.min);
-    libraryResizer.setAttribute('aria-valuemax', limits.max);
-    libraryResizer.setAttribute('aria-valuenow', actualWidth);
-    libraryResizer.setAttribute('aria-valuetext', t('pixelWidth', { count: actualWidth }));
-  }
-
-  function moveLibraryResize(event) {
-    if (libraryResize?.pointerId !== event.pointerId) return;
-    const { startX, startWidth, previousWidth } = libraryResize;
-    const width = clampLibraryWidth(startWidth + startX - event.clientX, libraryWidthLimits());
-    libraryWidth = width === startWidth ? previousWidth : width;
-    renderLibraryWidth();
-  }
-
-  function finishLibraryResize(keep) {
-    if (!libraryResize) return;
-    const { pointerId, previousWidth } = libraryResize;
-    libraryResize = null;
-    libraryResizer.classList.remove('is-resizing');
-    if (libraryResizer.hasPointerCapture(pointerId)) libraryResizer.releasePointerCapture(pointerId);
-    if (keep) {
-      if (libraryWidth !== previousWidth) persistLibraryWidth();
-    } else {
-      libraryWidth = previousWidth;
-      renderLibraryWidth();
-    }
-  }
-
-  function bindLibraryResize() {
-    libraryResizer.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || gesture || libraryResize) return;
-      libraryResize = {
-        pointerId: event.pointerId, startX: event.clientX, startWidth: library.offsetWidth, previousWidth: libraryWidth
-      };
-      libraryResizer.focus({ preventScroll: true });
-      libraryResizer.classList.add('is-resizing');
-      libraryResizer.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    });
-    libraryResizer.addEventListener('pointermove', moveLibraryResize);
-    libraryResizer.addEventListener('pointerup', event => {
-      if (libraryResize?.pointerId !== event.pointerId) return;
-      moveLibraryResize(event);
-      finishLibraryResize(true);
-    });
-    for (const name of ['pointercancel', 'lostpointercapture']) {
-      libraryResizer.addEventListener(name, event => {
-        if (libraryResize?.pointerId === event.pointerId) finishLibraryResize(false);
-      });
-    }
-    libraryResizer.addEventListener('dblclick', () => {
-      libraryWidth = null;
-      renderLibraryWidth();
-      persistLibraryWidth();
-    });
-    libraryResizer.addEventListener('keydown', event => {
-      if (gesture || libraryResize) return;
-      const limits = libraryWidthLimits();
-      const step = event.shiftKey ? 48 : 16;
-      const widths = {
-        ArrowLeft: library.offsetWidth + step, ArrowRight: library.offsetWidth - step,
-        Home: limits.min, End: limits.max
-      };
-      const width = widths[event.key];
-      if (!Number.isFinite(width)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      libraryWidth = clampLibraryWidth(width, limits);
-      renderLibraryWidth();
-      persistLibraryWidth();
-    });
-    new ResizeObserver(renderLibraryWidth).observe(editor);
   }
 
   async function persist() {
@@ -697,6 +584,7 @@
         activeTileId = tile.id;
         if (tool === 'select' || tool === 'pan' || tool === 'erase') setTool('draw');
         renderLibrary();
+        if (libraryDialog?.open) libraryDialog.close();
       });
       if (tile.id === focusedTileId) focusTarget = choice;
 
@@ -744,6 +632,31 @@
     byId('hidden-drawing-tile').hidden = !hiddenTile;
     if (hiddenTile) byId('hidden-drawing-tile').textContent = t('hiddenDrawingTile', { name: hiddenTile.name });
     if (focusTarget) focusTarget.focus({ preventScroll: true });
+  }
+
+  function bindExpandedLibrary() {
+    if (!libraryDialog) return;
+    const list = byId('tile-list');
+    const feedback = byId('feedback');
+    let sidebarScroll;
+    expandLibrary.addEventListener('click', () => {
+      if (gesture || libraryContent.parentNode !== libraryPanel) return;
+      sidebarScroll = { panel: libraryPanel.scrollTop, list: list.scrollTop };
+      drawHover = undefined;
+      layers.preview.replaceChildren();
+      expandLibrary.focus({ preventScroll: true });
+      libraryDialog.append(libraryContent, feedback);
+      libraryDialog.showModal();
+      libraryDialog.scrollTop = 0;
+    });
+    closeLibrary.addEventListener('click', () => libraryDialog.close());
+    libraryDialog.addEventListener('close', () => {
+      libraryPanel.append(libraryContent);
+      libraryDialog.before(feedback);
+      expandLibrary.focus({ preventScroll: true });
+      libraryPanel.scrollTop = sidebarScroll.panel;
+      list.scrollTop = sidebarScroll.list;
+    });
   }
 
   function bindLibraryFilters() {
@@ -1081,6 +994,10 @@
     activeTileId = tile.id;
     tileDialog.close();
     commit({ ...project, tiles });
+    if (libraryDialog?.open && editingTileId) {
+      const nextControl = byId('tile-list').querySelector('.tile-row.active .edit-tile') || byId('add-tile-text');
+      nextControl.focus({ preventScroll: true });
+    }
     if (shouldStartDrawing && !selectedIds.size) setTool('draw');
   }
 
@@ -1219,8 +1136,8 @@
   }
 
   function beginPointer(event) {
-    if (gesture || libraryResize || (event.button !== 0 && event.button !== 1)) return;
-    if (tileDialog.open || newDialog.open) return;
+    if (gesture || (event.button !== 0 && event.button !== 1)) return;
+    if (tileDialog.open || newDialog.open || libraryDialog?.open) return;
     if (drawAngleInput && document.activeElement === drawAngleInput) drawAngleInput.blur();
     drawHover = undefined;
     const point = surfacePoint(event);
@@ -1532,7 +1449,7 @@
   }
 
   function onKeyDown(event) {
-    if (!placementIndex || tileDialog.open || newDialog.open) return;
+    if (!placementIndex || tileDialog.open || newDialog.open || libraryDialog?.open) return;
     const key = event.key.toLowerCase();
     if (key === 'escape') {
       event.preventDefault();
@@ -1578,7 +1495,6 @@
       endPointer({ type: 'pointercancel', pointerId });
       if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
     }
-    finishLibraryResize(false);
     stopSpacePan();
     const inventory = byId('piece-inventory');
     if (inventory.open) {
@@ -1618,7 +1534,6 @@
     renderPieceSummary();
     librarySource = undefined;
     renderLibrary();
-    renderLibraryWidth();
     renderSelection();
     renderView();
     if (saveStatus) setSaveStatus(saveStatus);
@@ -1627,9 +1542,9 @@
 
   bindSettings();
   bindLibraryFilters();
+  byId('library-resizer')?.remove();
+  bindExpandedLibrary();
   bindReferences();
-  renderLibraryWidth();
-  bindLibraryResize();
   document.querySelectorAll('[data-tool].tool').forEach(button => {
     button.addEventListener('click', () => setTool(button.dataset.tool));
   });
@@ -1647,7 +1562,9 @@
     syncTriangleDimensions();
   });
   byId('tile-form').addEventListener('submit', saveTile);
-  tileDialog.addEventListener('cancel', returnToSelection);
+  tileDialog.addEventListener('cancel', () => {
+    if (!libraryDialog?.open) returnToSelection();
+  });
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
   if (drawAngleInput) {
