@@ -21,6 +21,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - With the Freehand tool, set **Rotation** below the board before clicking or dragging. Press **R** or use the rotate button to turn the next tiles by 15°.
 - A red, translucent tile preview marks a blocked freehand placement and keeps the tiles and grout underneath visible.
 - Use the expand button next to **Tile library** to widen the sidebar and browse the tiles in a grid. The board remains available while you work. Use the same button to switch back to the compact list.
+- Choose **Clone tile type** on a library tile to prefill a new tile type with its shape, dimensions, colour, and tags. Edit the copy and save it as a separate tile type.
 - Open **Sort and filter** in the tile library to sort tiles by name or filter by size and colour. The browser remembers the sort order.
 - The colour filter uses families such as browns and yellows. A shade can belong to more than one family.
 - Add comma-separated tags to a tile type, such as `glass, outdoor`. The tag cloud shows how many tile types have each tag. Selecting multiple tags shows tile types that have all of them. Tags are saved with the project.

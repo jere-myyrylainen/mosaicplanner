@@ -71,7 +71,7 @@
   let selectedIds = new Set();
   let copiedPieces = [];
   let pendingPaste;
-  let editingTileId = null;
+  let tileDraft;
   let triangleUsesAngle = false;
   let tool = 'draw';
   let drawAngle = 0;
@@ -630,6 +630,13 @@
       edit.setAttribute('aria-label', t('editNamedTile', { name: tile.name }));
       edit.append(icon('edit'));
       edit.addEventListener('click', () => openTileDialog(tile));
+      const clone = document.createElement('button');
+      clone.type = 'button';
+      clone.className = 'icon-button clone-tile';
+      clone.title = t('cloneTileType');
+      clone.setAttribute('aria-label', t('cloneNamedTile', { name: tile.name }));
+      clone.append(icon('copy'));
+      clone.addEventListener('click', () => openTileDialog(tile, { clone: true }));
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'icon-button remove-tile delete-button';
@@ -637,7 +644,10 @@
       remove.setAttribute('aria-label', t('removeNamedTile', { name: tile.name }));
       remove.append(icon('delete'));
       remove.addEventListener('click', () => removeTileFromLibrary(tile));
-      item.append(choice, edit, remove);
+      const actions = document.createElement('div');
+      actions.className = 'tile-actions';
+      actions.append(edit, clone, remove);
+      item.append(choice, actions);
       fragment.append(item);
     }
     list.replaceChildren(fragment);
@@ -939,6 +949,11 @@
     tileHeightInput.required = !hideHeight;
     tileHeightInput.min = triangle ? Model.MIN_TRIANGLE_HEIGHT : .5;
     tileHeightInput.step = triangle ? 'any' : '0.1';
+    if (tileDraft?.source) {
+      // Imported dimensions can be finer than the regular 0.1 mm input step.
+      if (tileWidthInput.validity.stepMismatch) tileWidthInput.step = 'any';
+      if (tileHeightInput.validity.stepMismatch) tileHeightInput.step = 'any';
+    }
     syncTriangleDimensions();
   }
 
@@ -958,14 +973,23 @@
     byId('tile-error').hidden = true;
   }
 
-  function openTileDialog(tile) {
-    if (!tile && project.tiles.length >= Model.MAX_TYPES) {
+  function openTileDialog(tile, { clone = false } = {}) {
+    const editing = Boolean(tile && !clone);
+    if (!editing && project.tiles.length >= Model.MAX_TYPES) {
       notify('tooManyTileTypes', { count: Model.MAX_TYPES });
       return;
     }
-    editingTileId = tile ? tile.id : null;
-    byId('tile-dialog-title').textContent = t(tile ? 'editTileType' : 'addTileType');
-    byId('tile-name').value = tile ? tile.name : '';
+    tileDraft = { source: tile, editing };
+    const title = byId('tile-dialog-title');
+    title.dataset.text = clone ? 'cloneTileType' : editing ? 'editTileType' : 'addTileType';
+    title.textContent = t(title.dataset.text);
+    const nameInput = byId('tile-name');
+    nameInput.value = tile ? tile.name : '';
+    if (clone) {
+      const suffix = t('tileCloneNameSuffix');
+      const base = tile.name.slice(0, nameInput.maxLength - suffix.length).replace(/[\uD800-\uDBFF]$/, '').trimEnd();
+      nameInput.value = base + suffix;
+    }
     const equilateral = tile?.shape === 'equilateral';
     tileShapeInput.value = triangleAngle && equilateral ? 'triangle' : (tile?.shape || 'rectangle');
     byId('tile-color').value = tile ? tile.color : '#347e73';
@@ -977,23 +1001,32 @@
     byId('tile-error').hidden = true;
     updateTileShape();
     tileDialog.showModal();
+    if (clone) nameInput.select();
   }
 
   function saveTile(event) {
     event.preventDefault();
+    if (!tileDialog.open) return;
     const name = byId('tile-name').value.trim();
     let shape = tileShapeInput.value;
     const color = byId('tile-color').value;
     const width = tileWidthInput.valueAsNumber;
     const error = byId('tile-error');
-    const previous = placementIndex.tileTypes.get(editingTileId);
+    const { source, editing } = tileDraft;
+    const previous = editing ? placementIndex.tileTypes.get(source.id) : undefined;
+    const original = previous || source;
+    if (!editing && project.tiles.length >= Model.MAX_TYPES) {
+      error.textContent = t('tooManyTileTypes', { count: Model.MAX_TYPES });
+      error.hidden = false;
+      return;
+    }
     let height = tileHeightInput.valueAsNumber;
     if (shape === 'circle') height = width;
     else if (shape === 'equilateral') height = Model.triangleHeight(width);
     else if (shape === 'triangle' && triangleAngle && triangleUsesAngle) {
       const angle = triangleAngle.valueAsNumber;
-      height = previous?.width === width && angle === Model.triangleApexAngle(width, previous.height) ?
-        previous.height : Model.triangleHeightFromAngle(width, angle);
+      height = original?.width === width && angle === Model.triangleApexAngle(width, original.height) ?
+        original.height : Model.triangleHeightFromAngle(width, angle);
       if (!Model.validNumber(height, Model.MIN_TRIANGLE_HEIGHT, 10000)) {
         error.textContent = Number.isNaN(height) ? t('invalidApexAngle') :
           t('triangleHeightRange', { min: Model.MIN_TRIANGLE_HEIGHT, max: 10000 });
@@ -1002,7 +1035,7 @@
         return;
       }
     }
-    if (previous?.shape === 'equilateral' && shape === 'triangle' && height === Model.triangleHeight(width)) {
+    if (original?.shape === 'equilateral' && shape === 'triangle' && height === Model.triangleHeight(width)) {
       shape = 'equilateral';
     }
 
@@ -1021,8 +1054,8 @@
       tagsInput.focus();
       return;
     }
-    const tile = { id: editingTileId || nextId('tile'), name, shape, color, width, height, ...(tags.length ? { tags } : {}) };
-    const tiles = editingTileId ? project.tiles.map(old => old.id === tile.id ? tile : old) : [...project.tiles, tile];
+    const tile = { id: editing ? source.id : nextId('tile'), name, shape, color, width, height, ...(tags.length ? { tags } : {}) };
+    const tiles = editing ? project.tiles.map(old => old.id === tile.id ? tile : old) : [...project.tiles, tile];
 
     if (previous && (previous.shape !== shape || previous.width !== width || previous.height !== height)) {
       const changed = project.pieces.filter(piece => piece.tileId === tile.id);
@@ -1042,8 +1075,9 @@
     activeTileId = tile.id;
     tileDialog.close();
     commit({ ...project, tiles });
-    if (editingTileId) {
-      const nextControl = byId('tile-list').querySelector('.tile-row.active .edit-tile') || byId('add-tile-text');
+    if (source) {
+      const action = editing ? '.edit-tile' : '.tile-choice';
+      const nextControl = byId('tile-list').querySelector('.tile-row.active ' + action) || byId('add-tile-text');
       nextControl.focus({ preventScroll: true });
     }
     if (shouldStartDrawing && !selectedIds.size) setTool('draw');
@@ -1634,6 +1668,7 @@
       notify('projectDragActive');
       return;
     }
+    if (tileDialog.open) tileDialog.close();
     projectGeneration++;
     copiedPieces = [];
     selectedIds.clear();

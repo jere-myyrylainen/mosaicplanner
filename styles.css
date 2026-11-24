@@ -280,14 +280,14 @@ select {
 .tile-list:empty { margin-top: 0; }
 .empty-library { margin: .6rem 0 0; color: var(--muted); font-size: .875rem; }
 .tile-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, 26px); align-items: center;
+  display: flex; flex-wrap: wrap; align-items: center;
   border: 1px solid transparent; border-radius: 8px; gap: .05rem; padding-right: .2rem;
 }
 .tile-row.active { background: #edf4ed; border-color: #c9dfce; }
 .tile-row:hover { background: #edf4ed; }
 .tile-row button:focus-visible { outline-offset: -2px; }
 .tile-choice {
-  display: flex; align-items: center; min-width: 0; gap: .58rem; padding: .42rem .32rem;
+  display: flex; flex: 1 1 7rem; align-items: center; min-width: 0; gap: .58rem; padding: .42rem .32rem;
   text-align: left; background: transparent; border: 0; border-radius: 7px;
 }
 .tile-swatch {
@@ -297,9 +297,10 @@ select {
 .tile-caption strong { overflow-wrap: anywhere; font-size: .875rem; }
 .tile-caption small { color: var(--muted); font-size: .78rem; }
 .tile-caption .tile-tags { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.edit-tile, .remove-tile { width: 26px; height: 30px; }
-.edit-tile { color: var(--muted); }
-.edit-tile .icon, .remove-tile .icon { width: .92rem; height: .92rem; }
+.tile-actions { display: flex; gap: .05rem; margin-inline-start: auto; }
+.tile-actions .icon-button { width: 26px; height: 30px; }
+.edit-tile, .clone-tile { color: var(--muted); }
+.tile-actions .icon { width: .92rem; height: .92rem; }
 .add-tile-text { width: 100%; margin-top: .7rem; border: 1px dashed #c5d4c8; color: var(--accent); }
 .add-tile-text:hover { background: var(--active); }
 .selected-panel p { margin: .4rem 0 .65rem; color: var(--muted); font-size: .875rem; }
@@ -325,21 +326,19 @@ select {
 .library-expanded .library-filters fieldset, .library-expanded .clear-filters { grid-column: 1 / -1; }
 .library-expanded .tile-list { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: .55rem; }
 .library-expanded .tile-row {
-  grid-template-columns: minmax(0, 1fr) 32px 32px; grid-template-rows: 1fr auto;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto;
   align-items: stretch; padding: .28rem; border-color: var(--line); background: #fff;
 }
 .library-expanded .tile-row.active, .library-expanded .tile-row:hover {
   background: #edf4ed; border-color: #c9dfce;
 }
 .library-expanded .tile-choice {
-  grid-column: 1 / -1; flex-direction: column; align-items: flex-start; gap: .5rem;
+  flex-direction: column; align-items: flex-start; gap: .5rem;
   min-height: 5.5rem; padding: .45rem;
 }
 .library-expanded .tile-swatch { width: 34px; height: 34px; }
 .library-expanded .tile-caption { width: 100%; }
-.library-expanded .edit-tile { grid-column: 2; }
-.library-expanded .remove-tile { grid-column: 3; }
-.library-expanded .edit-tile, .library-expanded .remove-tile { width: 32px; }
+.library-expanded .tile-actions .icon-button { width: 32px; }
 
 dialog {
   width: min(420px, calc(100% - 2rem)); border: 1px solid var(--line); border-radius: 14px; padding: 0;
