@@ -891,11 +891,14 @@
     }
 
     accepts(geometry) {
-      if (!fitsBoard(this.board, geometry)) return false;
+      return fitsBoard(this.board, geometry) && !this.hasConflict(geometry);
+    }
+
+    hasConflict(geometry) {
       for (const other of this.nearby(geometry, this.gap)) {
-        if (tooClose(geometry, other, this.gap)) return false;
+        if (tooClose(geometry, other, this.gap)) return true;
       }
-      return true;
+      return false;
     }
 
     closestPlacement(piece, limit, points, accepts) {

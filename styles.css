@@ -147,7 +147,7 @@ select {
 }
 #canvas { position: absolute; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; }
 #canvas [data-piece] { pointer-events: visiblePainted; }
-.stage[data-tool="draw"] #canvas, .stage[data-tool="line"] #canvas, .stage[data-tool="select"] #canvas,
+.stage[data-tool="draw"] #canvas, .stage[data-tool="line"] #canvas, .stage[data-tool="select"] #canvas, .stage[data-tool="paste"] #canvas,
 .stage[data-tool="shape"] #canvas, .stage[data-tool="fill"] #canvas,
 .stage[data-tool="erase"] #canvas, .stage[data-tool^="guide"] #canvas { cursor: crosshair; }
 .stage[data-tool="select"] #canvas [data-piece] { cursor: move; }
@@ -174,9 +174,9 @@ select {
 .selection-marquee {
   fill: #193e9a1f; stroke: #193e9a; stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke;
 }
-.preview-piece { opacity: .55; }
-.blocked-preview {
-  fill: #d33c38; fill-opacity: .24;
+.preview-piece, .paste-preview .piece-face { opacity: .55; }
+.blocked-preview, .paste-preview.invalid-paste .piece-face {
+  fill: #d33c38; fill-opacity: .24; opacity: 1;
   stroke: #b42e29; stroke-width: 1.5; vector-effect: non-scaling-stroke;
 }
 .guide { fill: none; stroke: var(--accent); stroke-dasharray: 4 4; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
@@ -354,6 +354,7 @@ dialog form > p { margin: 0; color: var(--muted); }
 .dialog-error { margin: 0; color: #8d3028; font-size: .87rem; }
 .feedback {
   position: fixed; bottom: 3.5rem; left: 50%; transform: translateX(-50%); z-index: 5;
+  pointer-events: none;
   max-width: min(31rem, calc(100% - 2rem)); margin: 0; padding: .6rem .8rem; border-radius: 8px;
   background: #254037; color: white; box-shadow: 0 4px 15px #19352a28; font-size: .875rem;
 }

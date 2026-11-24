@@ -27,6 +27,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - Choose **Grout width** and **Grout color** under **Board**. Each tile gets half the width around its edges, so tiles spaced at the minimum gap share a full-width joint. Set the width to zero to hide the grout. Changing the width redraws the grout and updates the minimum gap for subsequent placements. The color is saved with the project, and older files open with gray grout. Fill applies the enabled snapping options to its first tile, then uses the tile dimensions and grout width to place the remaining tiles.
 - Use the trash button in the library to remove a tile type. Tiles already placed with that type stay on the board and in the saved file.
 - Click a tile to select it. Drag from an empty spot to select multiple tiles, or Shift-click individual tiles to add them to or remove them from the selection. Drag a selected tile to move the entire selection. Choose **Delete selected** to remove those tiles together. You can also rotate a single selected tile.
+- Use **Copy selected tiles** and **Paste tiles** in the toolbar to duplicate a selection within the current project. Click or tap the board to place the preview. The copies keep their spacing and rotation, and the editor selects them together after placement. Press Esc or choose **Cancel** to leave paste mode.
 - Scroll the mouse wheel to zoom. Use the Pan tool or hold Space while dragging to move the view.
 - With the Eraser, click to remove a single tile or drag to remove several. Undo restores all tiles removed in one drag.
 - Open **Tile counts** at the bottom of the canvas to see the number of placed tiles of each type. The counts include placed tiles whose types have been removed from the library.
@@ -45,11 +46,13 @@ To open a specific plan automatically, put its JSON file on the same web server 
 | --- | --- |
 | V, B, L, M, G, H | Select, Freehand, Line, Shape, Fill, Pan |
 | E | Eraser |
-| Esc | Return to the Select tool |
+| Esc | Cancel paste or return to the Select tool |
 | Space + drag | Pan the view |
 | R | Rotate the freehand tile or a selected tile by 15° |
 | Shift + click or drag | Modify the current selection |
 | Delete / Backspace | Delete selected tiles |
+| Ctrl / ⌘ + C | Copy selected tiles |
+| Ctrl / ⌘ + V | Start placing a copy |
 | Ctrl / ⌘ + Z | Undo |
 | Ctrl / ⌘ + Shift + Z | Redo |
 | Ctrl / ⌘ + S | Save to a file |

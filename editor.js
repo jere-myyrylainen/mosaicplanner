@@ -11,6 +11,7 @@
   const guideTools = new Map([['guideLine', 'line'], ['guideSquare', 'square'], ['guideCircle', 'circle']]);
   const gridNumbers = { size: 'grid-size', weight: 'grid-weight', offsetX: 'grid-offset-x', offsetY: 'grid-offset-y' };
   const gridChecks = { visible: 'grid-visible', guidesVisible: 'guides-visible', snap: 'grid-snap', snapTiles: 'tile-snap' };
+  const editableFields = 'input, select, textarea, [contenteditable="true"]';
   const SNAP_PIXELS = 8;
   const colorFamilies = [
     'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'white', 'gray', 'black'
@@ -41,6 +42,9 @@
   const drawAngleInput = byId('draw-angle');
   const seamColorInput = byId('seam-color');
   const expandLibrary = byId('expand-library');
+  const copyTilesButton = byId('copy-tiles');
+  const pasteTilesButton = byId('paste-tiles');
+  const cancelPasteButton = byId('cancel-paste');
   const past = [];
   const future = [];
   const pieceElements = new Map();
@@ -65,11 +69,14 @@
   let libraryTileColors = new Map();
   let activeTileId;
   let selectedIds = new Set();
+  let copiedPieces = [];
+  let pendingPaste;
   let editingTileId = null;
   let triangleUsesAngle = false;
   let tool = 'draw';
   let drawAngle = 0;
   let drawHover;
+  let boardHover;
   let placementIndex;
   let gesture = null;
   let spacePressed = false;
@@ -116,6 +123,10 @@
       const inUse = new Set(next.pieces.map(piece => piece.tileId));
       const tiles = next.tiles.filter(tile => !tile.archived || inUse.has(tile.id));
       if (tiles.length !== next.tiles.length) next = { ...next, tiles };
+    }
+    if (pendingPaste && next.tiles !== project.tiles) {
+      pendingPaste = undefined;
+      tool = 'select';
     }
     project = next;
     if (!selectedReference()) activeReferenceId = project.references[0]?.id;
@@ -718,8 +729,10 @@
       fragment.append(pieceShape(piece, tile, { class: 'selection-outline' }));
     }
     layers.selection.replaceChildren(fragment);
-    byId('selected-panel').hidden = pieces.length === 0;
-    if (!pieces.length) return;
+    renderClipboardControls();
+    const showPanel = pieces.length > 0 && !pendingPaste;
+    byId('selected-panel').hidden = !showPanel;
+    if (!showPanel) return;
     const single = pieces.length === 1;
     byId('selected-title').textContent = t(single ? 'selectedTile' : 'selectedTiles');
     byId('selected-name').textContent = single ? placementIndex.tileTypes.get(pieces[0].tileId).name : pieceCount(pieces.length);
@@ -782,10 +795,9 @@
     if (gesture || !toolAvailable(name)) return;
     tool = name;
     drawHover = undefined;
-    if (name !== 'select') {
-      selectedIds.clear();
-      renderSelection();
-    }
+    if (name !== 'paste') pendingPaste = undefined;
+    if (name !== 'select' && name !== 'paste') selectedIds.clear();
+    renderSelection();
     renderTools();
     layers.preview.replaceChildren();
   }
@@ -804,6 +816,16 @@
     hint.hidden = showRotation;
     if (drawRotation) drawRotation.hidden = !showRotation;
     byId('outline-field').hidden = tool !== 'shape';
+    renderClipboardControls();
+  }
+
+  function renderClipboardControls() {
+    if (copyTilesButton) copyTilesButton.disabled = !selectedIds.size || Boolean(pendingPaste);
+    if (pasteTilesButton) {
+      pasteTilesButton.disabled = !copiedPieces.length;
+      pasteTilesButton.setAttribute('aria-pressed', String(Boolean(pendingPaste)));
+    }
+    if (cancelPasteButton) cancelPasteButton.hidden = !pendingPaste;
   }
 
   function changeBoard(changes) {
@@ -1172,7 +1194,9 @@
   function beginPointer(event) {
     if (gesture || (event.button !== 0 && event.button !== 1)) return;
     if (tileDialog.open || newDialog.open) return;
-    if (drawAngleInput && document.activeElement === drawAngleInput) drawAngleInput.blur();
+    const focused = document.activeElement;
+    if ((drawAngleInput && focused === drawAngleInput) ||
+        ((tool === 'select' || pendingPaste) && focused?.closest(editableFields))) focused.blur();
     drawHover = undefined;
     const point = surfacePoint(event);
     const pan = tool === 'pan' || spacePressed || event.button === 1;
@@ -1189,6 +1213,8 @@
     } else if (tool === 'select') {
       gesture = beginSelection(event, point);
       if (!gesture) return;
+    } else if (pendingPaste) {
+      gesture = { kind: 'paste', placement: previewPaste(point) };
     } else if (tool === 'reference') {
       gesture = { kind: 'reference', origin: point, reference: selectedReference() };
     } else if (tool === 'moveGrid') {
@@ -1264,11 +1290,16 @@
     return { ...piece, x: piece.x + x, y: piece.y + y };
   }
 
-  function selectionAcceptsPlacement({ anchor, pieces, index }, candidate) {
-    const offset = { x: candidate.piece.x - anchor.x, y: candidate.piece.y - anchor.y };
-    if (!offset.x && !offset.y) return true;
-    return index.accepts(candidate) && pieces.every(piece => piece.id === anchor.id ||
-      index.accepts(index.geometry(translatePiece(piece, offset))));
+  function groupPlacement({ anchor, pieces }, index, desiredOffset, canStay = false) {
+    const offsetFromAnchor = point => ({ x: point.x - anchor.x, y: point.y - anchor.y });
+    const accepts = candidate => {
+      const offset = offsetFromAnchor(candidate.piece);
+      if (canStay && !offset.x && !offset.y) return true;
+      return index.accepts(candidate) && pieces.every(piece => piece === anchor ||
+        index.accepts(index.geometry(translatePiece(piece, offset))));
+    };
+    const candidate = snappedGeometry(translatePiece(anchor, desiredOffset), index, accepts);
+    return { offset: offsetFromAnchor(candidate.piece), valid: accepts(candidate) };
   }
 
   function previewMove(current, point) {
@@ -1280,13 +1311,10 @@
       current.index = new Model.PlacementIndex(project, selectedIds);
       for (const piece of pieces) markPiece(piece.id, 'moving-piece', true);
     }
-    const accepts = candidate => selectionAcceptsPlacement(current, candidate);
-    const candidate = snappedGeometry(translatePiece(anchor, { x: dx, y: dy }), current.index, accepts);
-    const position = candidate.piece;
-    const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
+    const { offset, valid } = groupPlacement(current, current.index, { x: dx, y: dy }, true);
     if (offset.x === current.offset?.x && offset.y === current.offset?.y) return;
     current.offset = offset;
-    current.valid = accepts(candidate);
+    current.valid = valid;
     layers.selection.setAttribute('transform', 'translate(' + offset.x + ' ' + offset.y + ')');
     layers.selection.classList.toggle('invalid-selection', !current.valid);
   }
@@ -1305,6 +1333,80 @@
     commit({ ...project, pieces });
   }
 
+  function copySelection() {
+    if (gesture || pendingPaste || !selectedIds.size) return false;
+    copiedPieces = currentSelection();
+    renderClipboardControls();
+    notify(copiedPieces.length === 1 ? 'copiedOneTile' : 'copiedManyTiles', { count: copiedPieces.length });
+    return true;
+  }
+
+  function beginPaste() {
+    if (gesture || !copiedPieces.length) return false;
+    if (pendingPaste) return true;
+    if (project.pieces.length + copiedPieces.length > Model.MAX_PIECES) {
+      notify('pasteTileLimit');
+      return true;
+    }
+    const error = preparePaste();
+    if (error) notify(error);
+    else {
+      setTool('paste');
+      if (boardHover && !spacePressed) previewPaste(surfacePoint(boardHover));
+    }
+    return true;
+  }
+
+  function preparePaste() {
+    // Preserve the copied spacing. Only a physical overlap inside the group invalidates it.
+    const index = new Model.PlacementIndex({ ...project, seam: 0, pieces: [] });
+    const preview = svgElement('g', { class: 'paste-preview' });
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const piece of copiedPieces) {
+      const tile = index.tileTypes.get(piece.tileId);
+      if (!tile) return 'pasteMissingTileTypes';
+      const geometry = index.geometry(piece);
+      if (index.hasConflict(geometry)) return 'pasteOverlap';
+      index.add(geometry);
+      minX = Math.min(minX, geometry.minX);
+      minY = Math.min(minY, geometry.minY);
+      maxX = Math.max(maxX, geometry.maxX);
+      maxY = Math.max(maxY, geometry.maxY);
+      preview.append(pieceShape(piece, tile, { class: 'piece-face', fill: tile.color }));
+    }
+    const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    const distance = piece => (piece.x - center.x) ** 2 + (piece.y - center.y) ** 2;
+    const anchor = copiedPieces.reduce((nearest, piece) => distance(piece) < distance(nearest) ? piece : nearest);
+    pendingPaste = { anchor, center, pieces: copiedPieces, preview };
+  }
+
+  function previewPaste(point) {
+    const { center, preview } = pendingPaste;
+    const placement = groupPlacement(pendingPaste, placementIndex, { x: point.x - center.x, y: point.y - center.y });
+    const { offset, valid } = placement;
+    preview.setAttribute('transform', 'translate(' + offset.x + ' ' + offset.y + ')');
+    preview.classList.toggle('invalid-paste', !valid);
+    if (preview.parentNode !== layers.preview) layers.preview.replaceChildren(preview);
+    return placement;
+  }
+
+  function finishPaste(placement) {
+    if (!pendingPaste) return;
+    if (!placement.valid) {
+      notify('pastePlacementBlocked');
+      return;
+    }
+    if (project.pieces.length + pendingPaste.pieces.length > Model.MAX_PIECES) {
+      notify('pasteTileLimit');
+      return;
+    }
+    const copies = pendingPaste.pieces.map(piece => ({ ...translatePiece(piece, placement.offset), id: nextId('piece') }));
+    selectedIds = new Set(copies.map(piece => piece.id));
+    pendingPaste = undefined;
+    tool = 'select';
+    commit({ ...project, pieces: project.pieces.concat(copies) });
+  }
+
   function updateGesture(event) {
     const current = gesture;
     if (!current || current.pointerId !== event.pointerId) return;
@@ -1315,7 +1417,9 @@
       return;
     }
     const point = surfacePoint(event);
-    if (current.kind === 'move') {
+    if (current.kind === 'paste') {
+      if (pendingPaste) current.placement = previewPaste(point);
+    } else if (current.kind === 'move') {
       previewMove(current, point);
     } else if (current.kind === 'marquee') {
       updateMarquee(current, point);
@@ -1366,7 +1470,9 @@
   }
 
   function movePointer(event) {
+    if (event.pointerType !== 'touch') boardHover = { clientX: event.clientX, clientY: event.clientY };
     if (gesture) updateGesture(event);
+    else if (pendingPaste && !spacePressed) previewPaste(surfacePoint(event));
     else if (tool === 'draw' && !spacePressed) previewDrawHover(event);
     else if (tool === 'guideLine' && !spacePressed) {
       layers.preview.replaceChildren();
@@ -1384,6 +1490,10 @@
     if (event.type === 'pointerup') updateGesture(event);
     gesture = null;
     stage.classList.remove('is-panning');
+    if (current.kind === 'paste' && event.type === 'pointerup') {
+      finishPaste(current.placement);
+      return;
+    }
     layers.preview.replaceChildren();
 
     if (current.kind === 'move') {
@@ -1443,6 +1553,7 @@
   }
 
   function rotateSelected(angle) {
+    if (pendingPaste) return;
     const selected = singleSelectedPiece();
     if (!selected) return;
     if (!Number.isFinite(angle)) {
@@ -1463,7 +1574,7 @@
   }
 
   function removeSelected() {
-    if (!selectedIds.size || gesture) return;
+    if (!selectedIds.size || gesture || pendingPaste) return;
     const pieces = project.pieces.filter(piece => !selectedIds.has(piece.id));
     selectedIds.clear();
     commit({ ...project, pieces });
@@ -1486,6 +1597,7 @@
     zoom = nextZoom;
     renderView();
     layers.preview.replaceChildren();
+    if (pendingPaste && event && !spacePressed) previewPaste(surfacePoint(event));
   }
 
   function exportProject() {
@@ -1523,6 +1635,7 @@
       return;
     }
     projectGeneration++;
+    copiedPieces = [];
     selectedIds.clear();
     clearLibraryFilters();
     resetView();
@@ -1534,6 +1647,7 @@
   function newProject() {
     if (gesture) return;
     projectGeneration++;
+    copiedPieces = [];
     selectedIds.clear();
     clearLibraryFilters();
     resetView();
@@ -1556,12 +1670,16 @@
       exportProject();
       return;
     }
-    if (event.target.closest('input, select, textarea, [contenteditable="true"]')) return;
+    if (event.target.closest(editableFields)) return;
     if (event.metaKey || event.ctrlKey) {
       if (key === 'z' || key === 'y') {
         event.preventDefault();
         if (event.shiftKey || key === 'y') redo();
         else undo();
+      } else if (key === 'c' && !event.repeat && document.getSelection()?.isCollapsed !== false) {
+        if (copySelection()) event.preventDefault();
+      } else if (key === 'v' && beginPaste()) {
+        event.preventDefault();
       }
       return;
     }
@@ -1591,6 +1709,10 @@
       if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
     }
     stopSpacePan();
+    if (pendingPaste) {
+      setTool('select');
+      return;
+    }
     const inventory = byId('piece-inventory');
     if (inventory.open) {
       inventory.open = false;
@@ -1660,6 +1782,12 @@
   tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
+  copyTilesButton?.addEventListener('click', copySelection);
+  pasteTilesButton?.addEventListener('click', () => {
+    if (pendingPaste) setTool('select');
+    else beginPaste();
+  });
+  cancelPasteButton?.addEventListener('click', () => setTool('select'));
   if (drawAngleInput) {
     byId('rotate-draw').addEventListener('click', rotateByStep);
     drawAngleInput.addEventListener('input', () => changeDrawAngle(drawAngleInput.valueAsNumber));
@@ -1703,6 +1831,7 @@
   canvas.addEventListener('lostpointercapture', endPointer);
   canvas.addEventListener('pointerleave', () => {
     drawHover = undefined;
+    boardHover = undefined;
     if (!gesture) layers.preview.replaceChildren();
   });
   document.addEventListener('keydown', onKeyDown);
