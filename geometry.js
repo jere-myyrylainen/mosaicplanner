@@ -320,12 +320,12 @@
     yield* intersections(part, other);
   }
 
-  function* contactCrossings(first, second, origin) {
+  function* contactCrossings(first, second, { origin, intersect = intersections } = {}) {
     if (!second.length) return;
     for (const part of first) {
       const projected = origin && projectOntoGuide(origin, part);
       for (const other of second) {
-        const points = origin ? sharedContactPoints(part, other, origin, projected) : intersections(part, other);
+        const points = origin ? sharedContactPoints(part, other, origin, projected) : intersect(part, other);
         for (const point of points) {
           if (onContactPart(part, point) && onContactPart(other, point)) yield point;
         }
@@ -359,7 +359,7 @@
   }
 
   function* tileGuideCrossings(tiles, guides, origin) {
-    for (const tile of tiles) yield* contactCrossings(tile.parts, guides, origin);
+    for (const tile of tiles) yield* contactCrossings(tile.parts, guides, { origin });
   }
 
   function* gridTileCrossings(tiles, gridEdges) {
@@ -379,17 +379,68 @@
     }
   }
 
-  function* tileCrossings(tiles, guides, origin) {
-    yield* tileGuideCrossings(tiles, guides, origin);
+  function independentTileIntersections(first, second) {
+    if (first.shape === 'circle' && second.shape === 'circle') {
+      const distance = Math.hypot(first.x - second.x, first.y - second.y);
+      if (Math.abs(distance - Math.abs(first.radius - second.radius)) <= EPSILON) return [];
+    } else if (first.shape === 'circle' || second.shape === 'circle') {
+      const circle = first.shape === 'circle' ? first : second;
+      const line = first.shape === 'line' ? first : second;
+      const length = Math.hypot(line.endX - line.x, line.endY - line.y);
+      if (Math.abs(guideSide(line, circle) - circle.radius * length) <= EPSILON * length) return [];
+    }
+    return intersections(first, second);
+  }
 
-    // Check each pair of distinct neighbors whose contact bounds overlap.
+  function faceSpan(points, tx, ty, direction) {
+    const depths = points.map(point => direction * (point.x * ty - point.y * tx));
+    const edge = Math.max(...depths);
+    const along = points.filter((point, index) => edge - depths[index] <= EPSILON)
+      .map(point => point.x * tx + point.y * ty);
+    if (along.length >= 2) return [Math.min(...along), Math.max(...along)];
+  }
+
+  function* alignedTilePoints(geometry, tiles, limit) {
+    if (tiles.length < 2 || !geometry.points) return;
+    const { piece } = geometry;
+    for (const tile of tiles) {
+      if (!tile.fixed.points) continue;
+      for (const part of tile.parts) {
+        if (part.shape !== 'line') continue;
+        const dx = part.endX - part.x;
+        const dy = part.endY - part.y;
+        const length = Math.hypot(dx, dy);
+        if (!length) continue;
+        const tx = dx / length;
+        const ty = dy / length;
+        const fixedFace = faceSpan(tile.fixed.points, tx, ty, 1);
+        const movingFace = faceSpan(geometry.points, tx, ty, -1);
+        if (!fixedFace || !movingFace) continue;
+
+        // Align an endpoint of each facing edge while keeping the grout gap.
+        for (let end = 0; end < 2; end++) {
+          const shift = fixedFace[end] - movingFace[end];
+          if (Math.abs(shift) > limit / 2) continue;
+          const along = (piece.x - part.x) * tx + (piece.y - part.y) * ty + shift;
+          if (along < -EPSILON || along > length + EPSILON) continue;
+          yield { x: part.x + along * tx, y: part.y + along * ty };
+        }
+      }
+    }
+  }
+
+  function* tileCrossings(tiles, guides, geometry, limit) {
+    yield* tileGuideCrossings(tiles, guides, geometry.piece);
+    yield* alignedTilePoints(geometry, tiles, limit);
+
+    // Contacts along the same direction slide together. Opposing contacts can still pin a tile.
     const sorted = tiles.slice().sort((a, b) => a.minX - b.minX);
     for (let i = 0; i < sorted.length; i++) {
       const first = sorted[i];
       for (let j = i + 1; j < sorted.length && sorted[j].minX <= first.maxX + EPSILON; j++) {
         const second = sorted[j];
         if (first.maxY + EPSILON < second.minY || second.maxY + EPSILON < first.minY) continue;
-        yield* contactCrossings(first.parts, second.parts, origin);
+        yield* contactCrossings(first.parts, second.parts, { intersect: independentTileIntersections });
       }
     }
   }
@@ -791,6 +842,7 @@
         }
         if (parts.length) {
           tiles.push({
+            fixed: other,
             parts,
             minX: other.minX - (maxX - piece.x) - this.gap,
             maxX: other.maxX + (piece.x - minX) + this.gap,
@@ -818,7 +870,7 @@
       const crossingPoints = alignedGuideCrossings(project, guides, piece, limit, !gridAndTile);
       const crossing = this.closestPlacement(piece, guideRange, crossingPoints, accepts) || gridAndTile;
       const crossingRange = crossing ? Math.hypot(crossing.piece.x - piece.x, crossing.piece.y - piece.y) : pairLimit;
-      const contact = this.closestPlacement(piece, crossingRange, tileCrossings(tiles, custom, piece), accepts);
+      const contact = this.closestPlacement(piece, crossingRange, tileCrossings(tiles, custom, original, limit), accepts);
       if (crossing) return contact || crossing;
 
       if (grid.snap && (grid.visible || (grid.guidesVisible && project.guides.length))) {

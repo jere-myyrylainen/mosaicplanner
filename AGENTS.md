@@ -6,6 +6,7 @@ Mosaic Planner is an offline mosaic editor written in plain JavaScript, HTML, CS
 
 - For local HTTP testing, run `python3 -m http.server 8765 --bind 127.0.0.1` from the repository root and open `http://127.0.0.1:8765/`.
 - Check each changed script with `node --check path/to/script.js`. For model checks, load `require('./geometry.js')` from Node at the repository root.
+- Run `node tests/tile-snapping.test.cjs` after changing tile snapping.
 - Exercise changed behavior in the browser through the relevant editor or viewer controls. Use the feature checks below to choose cases that cover the change. If a browser check is unavailable, report what was verified and what remains unverified.
 
 ## Working conventions
