@@ -2,6 +2,7 @@
   'use strict';
 
   const SVG = 'http://www.w3.org/2000/svg';
+  const tilePolygonPoints = new WeakMap();
 
   function svgElement(tag, attributes = {}) {
     const element = document.createElementNS(SVG, tag);
@@ -25,11 +26,14 @@
     const transform = 'translate(' + piece.x + ' ' + piece.y + ') rotate(' + piece.angle + ')';
     const props = { transform, ...attributes };
     if (tile.shape === 'circle') return svgElement('circle', { r: halfWidth, ...props });
-    if (tile.shape === 'triangle' || tile.shape === 'equilateral') return svgElement('polygon', {
-      points: '0,' + -halfHeight + ' ' + halfWidth + ',' + halfHeight + ' ' + -halfWidth + ',' + halfHeight,
-      ...props
-    });
-    return svgElement('rect', { x: -halfWidth, y: -halfHeight, width: tile.width, height: tile.height, ...props });
+    if (tile.shape === 'rectangle') {
+      return svgElement('rect', { x: -halfWidth, y: -halfHeight, width: tile.width, height: tile.height, ...props });
+    }
+    if (!tilePolygonPoints.has(tile)) {
+      const vertices = window.MosaicGeometry.tileVertices(tile);
+      tilePolygonPoints.set(tile, vertices.map(({ x, y }) => x + ',' + y).join(' '));
+    }
+    return svgElement('polygon', { points: tilePolygonPoints.get(tile), ...props });
   }
 
   function guideShape(guide, attributes) {

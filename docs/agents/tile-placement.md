@@ -5,6 +5,7 @@ The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` 
 ## Preserve these behaviors
 
 - Use `PlacementIndex` for board fit, overlap, and grout gap checks. Candidate placement in a stroke must account for both earlier tiles and tiles accepted during that stroke. Use the same placement rules for the preview and commit.
+- Use `tileVertices` for polygon outlines in both rendering and geometry. Ovals and leaves use a convex sampled outline for fit, contact, and erasing. Reserve facing-edge endpoint alignment for tiles with straight sides.
 - Use `PlacementIndex.snapPlacement` for tile-to-tile snapping. It projects the moving tile's center onto the contact outline determined by both tile shapes, their rotation, and the grout gap. Use committed pieces as snap targets and the current action's index to validate candidates.
 - For combined snapping, intersect the contact outlines of two distinct placed tiles or of a placed tile and a grid or custom guide edge. Contacts with the same outward direction slide together. Opposing contacts can hold a tile between neighbors. When nearby tiles compete, offer exact alignment of the ends of two facing edges within a short lateral tolerance, with the full grout gap. Validate candidates against the board and other pieces, using the translated selection for group moves.
 - Keep freehand rotation and tile dimensions in the stroke spacing calculation. Line and Shape place tiles along the sampled path. Fill uses the snapped seed and then steps by tile dimensions plus grout width, expanding through connected accepted placements.
@@ -16,5 +17,6 @@ The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` 
 - Test an allowed and blocked placement with grout and rotation. Try a freehand drag, a line or outline, and a fill next to existing tiles.
 - Check group movement with snapping enabled, movement blocked by another tile, and undo after a drag or erase.
 - Check tile snapping against rectangles, rotated tiles, triangles, and circles with zero and nonzero grout. Exercise both sides of the contact line and make sure selected tiles cannot act as snap targets for their own move.
+- Check rotated diamonds, ovals, and leaves against tile edges and guides. Erase across a tapered tip and verify that a stroke through the empty corner of the tile's bounding box leaves the tile in place.
 - Place and move a tile in a corner formed by two neighboring tiles. Verify the grout gap to each neighbor, fallback to a single target outside the combined range, and rejection when another tile blocks the corner.
 - Run `node tests/tile-snapping.test.cjs` to verify alignment directly under either tile in a straight row, sliding between aligned positions, and genuine corners.

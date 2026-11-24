@@ -16,10 +16,19 @@
   const CELL_SIZE = 32;
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
+  const CURVE_SEGMENTS = 64;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
   const MIN_TRIANGLE_HEIGHT = .1;
   const boardShapes = ['rectangle', 'circle', 'rounded'];
-  const tileShapes = ['rectangle', 'circle', 'triangle', 'equilateral'];
+  const tileShapes = ['rectangle', 'circle', 'triangle', 'equilateral', 'diamond', 'oval', 'leaf'];
+  const ovalOutline = Array.from({ length: CURVE_SEGMENTS }, (_, index) => {
+    const angle = index * TAU / CURVE_SEGMENTS;
+    return { x: Math.cos(angle), y: Math.sin(angle) };
+  });
+  // Taper the oval toward both ends while keeping the leaf tips slightly rounded.
+  const leafOutline = ovalOutline.map(({ x, y }) => ({
+    x, y: y * Math.sqrt(.08 + .92 * y * y)
+  }));
 
   function angleInDegrees(angle) {
     return ((angle % 360) + 360) % 360;
@@ -91,10 +100,33 @@
     return nearest;
   }
 
-  function pieceGeometry(tile, piece) {
+  function tileVertices(tile) {
     const halfWidth = tile.width / 2;
     const halfHeight = tile.height / 2;
+    if (tile.shape === 'triangle' || tile.shape === 'equilateral') {
+      return [{ x: 0, y: -halfHeight }, { x: halfWidth, y: halfHeight }, { x: -halfWidth, y: halfHeight }];
+    }
+    if (tile.shape === 'diamond') {
+      return [{ x: 0, y: -halfHeight }, { x: halfWidth, y: 0 }, { x: 0, y: halfHeight }, { x: -halfWidth, y: 0 }];
+    }
+    if (tile.shape === 'oval' || tile.shape === 'leaf') {
+      const outline = tile.shape === 'oval' ? ovalOutline : leafOutline;
+      // The leaf's two tapered tips follow its longer dimension.
+      if (tile.shape === 'leaf' && halfHeight > halfWidth) {
+        return outline.map(({ x, y }) => ({ x: -y * halfWidth, y: x * halfHeight }));
+      }
+      return outline.map(({ x, y }) => ({ x: x * halfWidth, y: y * halfHeight }));
+    }
+    return [
+      { x: -halfWidth, y: -halfHeight }, { x: halfWidth, y: -halfHeight },
+      { x: halfWidth, y: halfHeight }, { x: -halfWidth, y: halfHeight }
+    ];
+  }
+
+  function pieceGeometry(tile, piece) {
     if (tile.shape === 'circle') {
+      const halfWidth = tile.width / 2;
+      const halfHeight = tile.height / 2;
       return {
         piece, radius: halfWidth, minX: piece.x - halfWidth, maxX: piece.x + halfWidth,
         minY: piece.y - halfHeight, maxY: piece.y + halfHeight
@@ -104,23 +136,14 @@
     const angle = piece.angle * Math.PI / 180;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    let vertices;
-    if (tile.shape === 'triangle' || tile.shape === 'equilateral') {
-      vertices = [{ x: 0, y: -halfHeight }, { x: halfWidth, y: halfHeight }, { x: -halfWidth, y: halfHeight }];
-    } else {
-      vertices = [
-        { x: -halfWidth, y: -halfHeight }, { x: halfWidth, y: -halfHeight },
-        { x: halfWidth, y: halfHeight }, { x: -halfWidth, y: halfHeight }
-      ];
-    }
-
-    const points = vertices.map(point => ({
+    const points = tileVertices(tile).map(point => ({
       x: piece.x + point.x * cos - point.y * sin,
       y: piece.y + point.x * sin + point.y * cos
     }));
     return {
       piece,
       points,
+      curved: tile.shape === 'oval' || tile.shape === 'leaf',
       minX: Math.min(...points.map(point => point.x)),
       minY: Math.min(...points.map(point => point.y)),
       maxX: Math.max(...points.map(point => point.x)),
@@ -325,6 +348,10 @@
     for (const part of first) {
       const projected = origin && projectOntoGuide(origin, part);
       for (const other of second) {
+        const a = part.bounds;
+        const b = other.bounds;
+        if (a && b && (a.maxX + EPSILON < b.minX || b.maxX + EPSILON < a.minX ||
+                       a.maxY + EPSILON < b.minY || b.maxY + EPSILON < a.minY)) continue;
         const points = origin ? sharedContactPoints(part, other, origin, projected) : intersect(part, other);
         for (const point of points) {
           if (onContactPart(part, point) && onContactPart(other, point)) yield point;
@@ -401,10 +428,10 @@
   }
 
   function* alignedTilePoints(geometry, tiles, limit) {
-    if (tiles.length < 2 || !geometry.points) return;
+    if (tiles.length < 2 || !geometry.points || geometry.curved) return;
     const { piece } = geometry;
     for (const tile of tiles) {
-      if (!tile.fixed.points) continue;
+      if (!tile.fixed.points || tile.fixed.curved) continue;
       for (const part of tile.parts) {
         if (part.shape !== 'line') continue;
         const dx = part.endX - part.x;
@@ -473,17 +500,26 @@
     return true;
   }
 
+  function projectionBounds(points, x, y) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const point of points) {
+      const value = x * point.x + y * point.y;
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    }
+    return { min, max };
+  }
+
   function overlapOnAxes(points, other) {
     return points.every((start, i) => {
       const end = points[(i + 1) % points.length];
       const dx = end.y - start.y;
       const dy = start.x - end.x;
-      const project = point => point.x * dx + point.y * dy;
-      const first = points.map(project);
-      const second = other.map(project);
+      const first = projectionBounds(points, dx, dy);
+      const second = projectionBounds(other, dx, dy);
       const tolerance = EPSILON * Math.hypot(dx, dy);
-      return Math.max(...first) > Math.min(...second) + tolerance &&
-        Math.max(...second) > Math.min(...first) + tolerance;
+      return first.max > second.min + tolerance && second.max > first.min + tolerance;
     });
   }
 
@@ -531,6 +567,36 @@
     return halfHull(points).concat(halfHull(points.reverse()));
   }
 
+  function summedOutline(first, second) {
+    if (second.length === 1) [first, second] = [second, first];
+    if (first.length === 1) {
+      return convexHull(second.map(point => ({ x: first[0].x + point.x, y: first[0].y + point.y })));
+    }
+
+    // Walking both convex outlines in edge angle order traces the boundary of their sum.
+    const edges = [];
+    function addEdges(points, source) {
+      let lowest = points[0];
+      for (let i = 0; i < points.length; i++) {
+        const start = points[i];
+        const end = points[(i + 1) % points.length];
+        if (start.y < lowest.y || (start.y === lowest.y && start.x < lowest.x)) lowest = start;
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+        edges.push({ end, source, angle: angle < 0 ? angle + TAU : angle });
+      }
+      return lowest;
+    }
+
+    const current = [addEdges(first, 0), addEdges(second, 1)];
+    const vertices = [];
+    edges.sort((a, b) => a.angle - b.angle);
+    for (const { end, source } of edges) {
+      current[source] = end;
+      vertices.push({ x: current[0].x + current[1].x, y: current[0].y + current[1].y });
+    }
+    return convexHull(vertices);
+  }
+
   function* tileContactParts(moving, fixed, gap) {
     const center = moving.piece;
     const radius = gap + (moving.radius || 0) + (fixed.radius || 0);
@@ -539,15 +605,11 @@
       return;
     }
 
-    // The hull of the vertex differences bounds the moving center at contact.
-    // Round that outline by the grout gap and by either tile's circular radius.
-    const differences = [];
-    for (const a of fixed.points || [fixed.piece]) {
-      for (const b of moving.points || [center]) {
-        differences.push({ x: a.x + (center.x - b.x), y: a.y + (center.y - b.y) });
-      }
-    }
-    const outline = convexHull(differences);
+    // The fixed outline plus the reversed moving outline bounds its center at contact.
+    // Round the result by the grout gap and by either tile's circular radius.
+    const offsets = moving.points ? moving.points.map(point => ({ x: center.x - point.x, y: center.y - point.y })) :
+      [{ x: 0, y: 0 }];
+    const outline = summedOutline(fixed.points || [fixed.piece], offsets);
     for (let i = 0; i < outline.length; i++) {
       const start = outline[i];
       const end = outline[(i + 1) % outline.length];
@@ -577,6 +639,29 @@
       if ((point.x - part.x) * dx + (point.y - part.y) * dy > EPSILON * Math.hypot(dx, dy)) return false;
     }
     return true;
+  }
+
+  function contactBounds(part) {
+    const { x, y, radius, previous, next } = part;
+    if (part.shape === 'line') {
+      return { minX: Math.min(x, part.endX), maxX: Math.max(x, part.endX),
+        minY: Math.min(y, part.endY), maxY: Math.max(y, part.endY) };
+    }
+    if (!previous) return { minX: x - radius, maxX: x + radius, minY: y - radius, maxY: y + radius };
+
+    // The corner arc runs between the normals of its two incident edges.
+    const ax = x - previous.x;
+    const ay = y - previous.y;
+    const bx = next.x - x;
+    const by = next.y - y;
+    const a = radius / Math.hypot(ax, ay);
+    const b = radius / Math.hypot(bx, by);
+    return {
+      minX: x + (ax <= 0 && bx >= 0 ? -radius : Math.min(a * ay, b * by)),
+      maxX: x + (ax >= 0 && bx <= 0 ? radius : Math.max(a * ay, b * by)),
+      minY: y + (ay <= 0 && by >= 0 ? -radius : Math.min(-a * ax, -b * bx)),
+      maxY: y + (ay >= 0 && by <= 0 ? radius : Math.max(-a * ax, -b * bx))
+    };
   }
 
   function* guideContactParts(geometry, guide, halfSeam) {
@@ -838,7 +923,10 @@
         const parts = [];
         for (const part of tileContactParts(geometry, other, this.gap)) {
           const projected = projectOntoGuide(piece, part);
-          if (Math.hypot(projected.x - piece.x, projected.y - piece.y) <= limit + EPSILON) parts.push(part);
+          if (Math.hypot(projected.x - piece.x, projected.y - piece.y) <= limit + EPSILON) {
+            part.bounds = contactBounds(part);
+            parts.push(part);
+          }
         }
         if (parts.length) {
           tiles.push({
@@ -1226,7 +1314,7 @@
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
     fitsBoard, gridOrigin, guideFromDrag, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions
   };
 

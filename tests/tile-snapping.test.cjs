@@ -57,4 +57,31 @@ expectPosition(rounds, tile(.6, 10.7, 0, circle.id), 0, Math.sqrt(108), 'Two cur
 const betweenRounds = project([tile(-12, 0, 0, circle.id), tile(12, 0, 0, circle.id)]);
 expectPosition(betweenRounds, tile(.5, .2, 0, circle.id), 0, 0, 'Opposing curved contacts can pin a tile');
 
+const newTypes = ['diamond', 'oval', 'leaf'].map(shape => ({
+  ...square, id: shape, name: shape, shape, width: 20, height: 10
+}));
+for (const seam of [0, 2]) {
+  const besideLeaf = project([tile(0, 0, 90, 'leaf')], seam);
+  besideLeaf.tiles.push(...newTypes);
+  const atGuide = Model.blankProject(newTypes);
+  atGuide.seam = seam;
+  atGuide.grid = { ...atGuide.grid, snap: true, visible: false };
+  atGuide.guides = [{ shape: 'line', x: 20, y: -80, endX: 20, endY: 80 }];
+  for (const { shape } of newTypes) {
+    const x = 15 + seam;
+    expectPosition(besideLeaf, tile(x + .35, 0, 0, shape), x, 0, shape + ' snaps beside a rotated leaf');
+    const at = 10 - seam / 2;
+    expectPosition(atGuide, tile(at + .35, 12, 0, shape), at, 12, shape + ' snaps its tip to a guide');
+  }
+}
+
+const betweenOvals = project([tile(-11, 0, 0, 'oval'), tile(11, 0, 0, 'oval')]);
+betweenOvals.tiles.push(...newTypes);
+const ovalIndex = new Model.PlacementIndex(betweenOvals);
+const ovalContact = ovalIndex.snapPlacement(betweenOvals, tile(.3, 10, 0, 'oval'), 3);
+assert(ovalIndex.accepts(ovalContact), 'Two oval contacts leave room for the moving tile');
+assert(Math.abs(ovalContact.piece.x) < 1e-7, 'Two symmetric oval contacts center the moving tile');
+assert(!ovalIndex.accepts(ovalIndex.geometry({ ...ovalContact.piece, y: ovalContact.piece.y - .01 })),
+  'Moving closer to the two ovals would reduce the grout gap');
+
 console.log('Tile snapping tests passed.');

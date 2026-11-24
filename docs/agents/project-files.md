@@ -6,6 +6,7 @@
 
 - Keep the `.mosaic.json` file self-contained. When adding an optional field, provide a default for older files and validate it before using it in either entry point. Use the same reader for editor import, autosave restoration, and the viewer.
 - Preserve existing piece locations on import. The reader validates fit, references to tile types, and physical overlap with a zero grout gap so saved projects remain readable after a grout gap increase.
+- Save diamonds, ovals, and leaves with the `diamond`, `oval`, and `leaf` shape values. Their width and height are the full dimensions in millimetres before rotation.
 - Use immutable snapshots for history and persistence. Keep zoom, active tools, selected pieces, and library filters as editor state. The language and library order are separate browser preferences.
 - Keep the current localStorage key and IndexedDB fallback compatible with previous saves. Preserve the behavior that newer saves take precedence when asynchronous writes finish and that a failed restore surfaces the load error.
 

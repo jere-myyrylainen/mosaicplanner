@@ -375,10 +375,12 @@
   }
 
   function tileSwatch(tile) {
-    const swatch = document.createElement('span');
-    swatch.className = 'tile-swatch ' + tile.shape;
-    swatch.style.setProperty('--tile-color', tile.color);
-    swatch.setAttribute('aria-hidden', 'true');
+    const viewSize = Math.max(tile.width, tile.height) * 1.1;
+    const swatch = svgElement('svg', {
+      class: 'tile-swatch', 'aria-hidden': 'true',
+      viewBox: [-viewSize / 2, -viewSize / 2, viewSize, viewSize].join(' ')
+    });
+    swatch.append(pieceShape({ x: 0, y: 0, angle: 0 }, tile, { class: 'piece-face', fill: tile.color }));
     return swatch;
   }
 
