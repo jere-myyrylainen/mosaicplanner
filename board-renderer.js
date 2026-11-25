@@ -2,7 +2,7 @@
   'use strict';
 
   const SVG = 'http://www.w3.org/2000/svg';
-  const tilePolygonPoints = new WeakMap();
+  const polygonPoints = new WeakMap();
 
   function svgElement(tag, attributes = {}) {
     const element = document.createElementNS(SVG, tag);
@@ -25,15 +25,16 @@
     const halfHeight = tile.height / 2;
     const transform = 'translate(' + piece.x + ' ' + piece.y + ') rotate(' + piece.angle + ')';
     const props = { transform, ...attributes };
-    if (tile.shape === 'circle') return svgElement('circle', { r: halfWidth, ...props });
-    if (tile.shape === 'rectangle') {
+    if (!piece.outline && tile.shape === 'circle') return svgElement('circle', { r: halfWidth, ...props });
+    if (!piece.outline && tile.shape === 'rectangle') {
       return svgElement('rect', { x: -halfWidth, y: -halfHeight, width: tile.width, height: tile.height, ...props });
     }
-    if (!tilePolygonPoints.has(tile)) {
-      const vertices = window.MosaicGeometry.tileVertices(tile);
-      tilePolygonPoints.set(tile, vertices.map(({ x, y }) => x + ',' + y).join(' '));
+    const key = piece.outline || tile;
+    if (!polygonPoints.has(key)) {
+      const vertices = piece.outline || window.MosaicGeometry.tileVertices(tile);
+      polygonPoints.set(key, vertices.map(({ x, y }) => x + ',' + y).join(' '));
     }
-    return svgElement('polygon', { points: tilePolygonPoints.get(tile), ...props });
+    return svgElement('polygon', { points: polygonPoints.get(key), ...props });
   }
 
   function guideShape(guide, attributes) {

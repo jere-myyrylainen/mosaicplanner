@@ -380,7 +380,12 @@
 
   function renderPieceSummary() {
     const counts = new Map();
-    for (const { tileId } of project.pieces) counts.set(tileId, (counts.get(tileId) || 0) + 1);
+    for (const { tileId, outline } of project.pieces) {
+      if (!counts.has(tileId)) counts.set(tileId, { total: 0, cut: 0 });
+      const count = counts.get(tileId);
+      count.total++;
+      if (outline) count.cut++;
+    }
     byId('work-count').textContent = projectSizeText() + ' · ' + pieceCount(project.pieces.length);
     renderInventory(placementIndex.tileTypes, counts);
   }
@@ -415,7 +420,8 @@
       label.append(tileSwatch(tile), name);
       heading.append(label);
       const count = document.createElement('td');
-      count.textContent = I18n.count(counts.get(tile.id));
+      const { total, cut } = counts.get(tile.id);
+      count.textContent = cut ? t('cutTileCount', { total, cut }) : I18n.count(total);
       row.append(heading, count);
       rows.append(row);
     }
@@ -744,7 +750,8 @@
     byId('selected-panel').hidden = !showPanel;
     if (!showPanel) return;
     const single = pieces.length === 1;
-    byId('selected-title').textContent = t(single ? 'selectedTile' : 'selectedTiles');
+    const title = single ? (pieces[0].outline ? 'selectedCutTile' : 'selectedTile') : 'selectedTiles';
+    byId('selected-title').textContent = t(title);
     byId('selected-name').textContent = single ? placementIndex.tileTypes.get(pieces[0].tileId).name : pieceCount(pieces.length);
     byId('selected-angle-field').hidden = !single;
     byId('rotate').hidden = !single;
@@ -1058,8 +1065,8 @@
     const tiles = editing ? project.tiles.map(old => old.id === tile.id ? tile : old) : [...project.tiles, tile];
 
     if (previous && (previous.shape !== shape || previous.width !== width || previous.height !== height)) {
-      const changed = project.pieces.filter(piece => piece.tileId === tile.id);
-      const unchanged = project.pieces.filter(piece => piece.tileId !== tile.id);
+      const changed = project.pieces.filter(piece => piece.tileId === tile.id && !piece.outline);
+      const unchanged = project.pieces.filter(piece => piece.tileId !== tile.id || piece.outline);
       const index = new Model.PlacementIndex({ ...project, tiles, pieces: unchanged });
       for (const piece of changed) {
         const geometry = index.geometry(piece);
@@ -1230,7 +1237,7 @@
     if (tileDialog.open || newDialog.open) return;
     const focused = document.activeElement;
     if ((drawAngleInput && focused === drawAngleInput) ||
-        ((tool === 'select' || pendingPaste) && focused?.closest(editableFields))) focused.blur();
+        ((tool === 'select' || tool === 'split' || pendingPaste) && focused?.closest(editableFields))) focused.blur();
     drawHover = undefined;
     const point = surfacePoint(event);
     const pan = tool === 'pan' || spacePressed || event.button === 1;
@@ -1269,6 +1276,8 @@
       gesture = { kind: 'erase', previous: point, erased: new Set() };
       const element = event.target.closest('[data-piece]');
       if (element) erasePiece(gesture, element.dataset.piece);
+    } else if (tool === 'split') {
+      gesture = { kind: 'split', start: point };
     } else if (tool === 'fill') {
       fillAt(point, tile);
       return;
@@ -1441,6 +1450,54 @@
     commit({ ...project, pieces: project.pieces.concat(copies) });
   }
 
+  function previewSplit(current, end) {
+    const { start } = current;
+    let target;
+    let fragments;
+    let error = 'splitAcrossTile';
+    for (const piece of placementIndex.piecesAlong(start, end)) {
+      const tile = placementIndex.tileTypes.get(piece.tileId);
+      const cut = Model.splitPiece(tile, piece, start, end, project.seam);
+      if (!cut) continue;
+      if (target) {
+        fragments = undefined;
+        error = 'splitOneTile';
+        break;
+      }
+      target = piece;
+      fragments = cut.fragments;
+      error = 'splitNoRoom';
+    }
+    if (fragments && project.pieces.length >= Model.MAX_PIECES) {
+      fragments = undefined;
+      error = 'tooManyTiles';
+    }
+    current.target = target;
+    current.fragments = fragments;
+    current.error = error;
+
+    const preview = document.createDocumentFragment();
+    if (fragments) {
+      const tile = placementIndex.tileTypes.get(target.tileId);
+      for (const piece of fragments) preview.append(pieceShape(piece, tile, { class: 'split-outline' }));
+    }
+    preview.append(svgElement('line', {
+      x1: start.x, y1: start.y, x2: end.x, y2: end.y,
+      class: fragments ? 'split-line' : 'split-line invalid-split'
+    }));
+    layers.preview.replaceChildren(preview);
+  }
+
+  function finishSplit({ target, fragments, error }) {
+    if (!fragments) {
+      notify(error);
+      return;
+    }
+    const halves = fragments.map(fragment => ({ ...fragment, id: nextId('piece') }));
+    const pieces = project.pieces.flatMap(piece => piece.id === target.id ? halves : [piece]);
+    commit({ ...project, pieces });
+  }
+
   function updateGesture(event) {
     const current = gesture;
     if (!current || current.pointerId !== event.pointerId) return;
@@ -1485,6 +1542,8 @@
       if (point.x === current.previous.x && point.y === current.previous.y) return;
       for (const piece of placementIndex.piecesAlong(current.previous, point)) erasePiece(current, piece.id);
       current.previous = point;
+    } else if (current.kind === 'split') {
+      previewSplit(current, point);
     } else if (current.kind === 'draw') {
       const { action, previous } = current;
       if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1e-7) return;
@@ -1558,6 +1617,10 @@
       return;
     }
     if (event.type !== 'pointerup' || current.kind === 'pan') return;
+    if (current.kind === 'split') {
+      finishSplit(current);
+      return;
+    }
     if (current.kind === 'guide') {
       if (current.guide) commit({
         ...project,
@@ -1728,7 +1791,7 @@
       layers.preview.replaceChildren();
       return;
     }
-    const shortcuts = { v: 'select', b: 'draw', l: 'line', m: 'shape', g: 'fill', e: 'erase', h: 'pan' };
+    const shortcuts = { v: 'select', b: 'draw', l: 'line', m: 'shape', g: 'fill', e: 'erase', x: 'split', h: 'pan' };
     if (shortcuts[key]) setTool(shortcuts[key]);
     if (key === 'delete' || key === 'backspace') {
       event.preventDefault();

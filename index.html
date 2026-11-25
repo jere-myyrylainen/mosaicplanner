@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f9f9f6">
   <title>Mosaic Planner</title>
-  <link rel="stylesheet" href="styles.css?v=12">
-  <script defer src="i18n.js?v=13"></script>
-  <script defer src="geometry.js?v=18"></script>
-  <script defer src="board-renderer.js?v=7"></script>
+  <link rel="stylesheet" href="styles.css?v=13">
+  <script defer src="i18n.js?v=14"></script>
+  <script defer src="geometry.js?v=19"></script>
+  <script defer src="board-renderer.js?v=8"></script>
   <script defer src="project-storage.js?v=1"></script>
-  <script defer src="editor.js?v=15"></script>
+  <script defer src="editor.js?v=16"></script>
 </head>
 <body inert>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -23,6 +23,7 @@
     <symbol id="i-line" viewBox="0 0 24 24"><path d="M7.5 16.5l9-9"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/></symbol>
     <symbol id="i-shape" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2"/></symbol>
     <symbol id="i-fill" viewBox="0 0 24 24"><path d="m4 12 7-7 7 7-7 7-7-7Zm3-9 4 4m-7 5h14m2 3s-2 2.5-2 4a2 2 0 0 0 4 0c0-1.5-2-4-2-4Z"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8.1 8.1 11.9 12M8.1 15.9 20 4"/></symbol>
     <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m4 14 9-9a2 2 0 0 1 3 0l4 4a2 2 0 0 1 0 3l-7 7H8l-4-4a1 1 0 0 1 0-1Zm5-5 8 8m-4 2h8"/></symbol>
     <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 12V6a1.5 1.5 0 0 1 3 0v5-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v6-3a1.5 1.5 0 0 1 3 0v6a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.5l-4-5a1.5 1.5 0 0 1 2-2.2l2 1.7Z"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5m-5-5h11a5 5 0 0 1 5 5v1"/></symbol>
@@ -143,6 +144,7 @@
           <button type="button" class="icon-button tool" data-tool="line" data-title="lineTitle" data-aria-label="line"><svg class="icon"><use href="#i-line"/></svg></button>
           <button type="button" class="icon-button tool" data-tool="shape" data-title="shapeTitle" data-aria-label="shapeLabel"><svg class="icon"><use href="#i-shape"/></svg></button>
           <button type="button" class="icon-button tool" data-tool="fill" data-title="fillTitle" data-aria-label="fillLabel"><svg class="icon"><use href="#i-fill"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="split" data-title="splitTitle" data-aria-label="split" aria-keyshortcuts="X"><svg class="icon" aria-hidden="true"><use href="#i-split"/></svg></button>
           <button type="button" class="icon-button tool" data-tool="erase" data-title="eraseTitle" data-aria-label="erase" aria-keyshortcuts="E"><svg class="icon"><use href="#i-eraser"/></svg></button>
           <button type="button" class="icon-button tool" data-tool="pan" data-title="panTitle" data-aria-label="pan"><svg class="icon"><use href="#i-hand"/></svg></button>
         </div>

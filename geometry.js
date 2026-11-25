@@ -17,6 +17,7 @@
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
   const CURVE_SEGMENTS = 64;
+  const MAX_OUTLINE_VERTICES = 128;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
   const MIN_TRIANGLE_HEIGHT = .1;
   const boardShapes = ['rectangle', 'circle', 'rounded'];
@@ -124,7 +125,7 @@
   }
 
   function pieceGeometry(tile, piece) {
-    if (tile.shape === 'circle') {
+    if (!piece.outline && tile.shape === 'circle') {
       const halfWidth = tile.width / 2;
       const halfHeight = tile.height / 2;
       return {
@@ -136,14 +137,14 @@
     const angle = piece.angle * Math.PI / 180;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    const points = tileVertices(tile).map(point => ({
+    const points = (piece.outline || tileVertices(tile)).map(point => ({
       x: piece.x + point.x * cos - point.y * sin,
       y: piece.y + point.x * sin + point.y * cos
     }));
     return {
       piece,
       points,
-      curved: tile.shape === 'oval' || tile.shape === 'leaf',
+      curved: !piece.outline && (tile.shape === 'oval' || tile.shape === 'leaf'),
       minX: Math.min(...points.map(point => point.x)),
       minY: Math.min(...points.map(point => point.y)),
       maxX: Math.max(...points.map(point => point.x)),
@@ -483,21 +484,98 @@
       return minSegmentDistanceSquared(geometry.piece, start, end) <= geometry.radius ** 2;
     }
 
-    // Clip the segment to the inside of each edge of the convex tile.
-    let entry = 0;
-    let exit = 1;
-    const points = geometry.points;
+    const range = polygonLineRange(geometry.points, start, end);
+    return Boolean(range && range.entry <= 1 && range.exit >= 0);
+  }
+
+  // Clip the line to the inside of each edge of the convex tile.
+  function polygonLineRange(points, start, end) {
+    let entry = -Infinity;
+    let exit = Infinity;
     for (let i = 0; i < points.length; i++) {
       const edgeStart = points[i];
       const edgeEnd = points[(i + 1) % points.length];
       const from = sideOfEdge(edgeStart, edgeEnd, start);
       const to = sideOfEdge(edgeStart, edgeEnd, end);
-      if (from < 0 && to < 0) return false;
-      if (from < 0) entry = Math.max(entry, from / (from - to));
-      if (to < 0) exit = Math.min(exit, from / (from - to));
-      if (entry > exit) return false;
+      if (from === to && from < 0) return;
+      if (to > from) entry = Math.max(entry, from / (from - to));
+      if (to < from) exit = Math.min(exit, from / (from - to));
+      if (entry > exit) return;
     }
-    return true;
+    return { entry, exit };
+  }
+
+  function clipOutline(points, normalX, normalY, offset) {
+    const result = [];
+    let previous = points[points.length - 1];
+    let from = previous.x * normalX + previous.y * normalY - offset;
+    for (const point of points) {
+      const to = point.x * normalX + point.y * normalY - offset;
+      if ((from < 0 && to > 0) || (from > 0 && to < 0)) {
+        const fraction = from / (from - to);
+        result.push({
+          x: previous.x + fraction * (point.x - previous.x),
+          y: previous.y + fraction * (point.y - previous.y)
+        });
+      }
+      if (to >= 0) result.push(point);
+      previous = point;
+      from = to;
+    }
+    return result;
+  }
+
+  function polygonArea(points) {
+    let doubledArea = 0;
+    for (let i = 2; i < points.length; i++) doubledArea += sideOfEdge(points[0], points[i - 1], points[i]);
+    return doubledArea / 2;
+  }
+
+  function splitPiece(tile, piece, start, end, gap) {
+    const radians = piece.angle * Math.PI / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const localPoint = ({ x, y }) => ({
+      x: (x - piece.x) * cos + (y - piece.y) * sin,
+      y: (y - piece.y) * cos - (x - piece.x) * sin
+    });
+    const first = localPoint(start);
+    const last = localPoint(end);
+    const dx = last.x - first.x;
+    const dy = last.y - first.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= EPSILON) return;
+
+    const points = piece.outline || (tile.shape === 'circle' ?
+      ovalOutline.map(({ x, y }) => ({ x: x * tile.width / 2, y: y * tile.width / 2 })) : tileVertices(tile));
+    const range = polygonLineRange(points, first, last);
+    const tolerance = EPSILON / length;
+    if (!range || range.entry < -tolerance || range.exit > 1 + tolerance ||
+        range.exit - range.entry <= tolerance) return;
+
+    const normalX = -dy / length;
+    const normalY = dx / length;
+    const offset = first.x * normalX + first.y * normalY;
+    const { min, max } = projectionBounds(points, normalX, normalY);
+    if (offset <= min + EPSILON || offset >= max - EPSILON) return;
+    const halfGap = gap / 2;
+    if (offset <= min + halfGap + EPSILON || offset >= max - halfGap - EPSILON) return {};
+
+    // Clip back from each side of the cut to leave room for grout inside the original tile.
+    const fragments = [];
+    for (const side of [1, -1]) {
+      const clipped = clipOutline(points, side * normalX, side * normalY, side * offset + halfGap);
+      if (clipped.length < 3) return {};
+      const x = clipped.reduce((sum, point) => sum + point.x, 0) / clipped.length;
+      const y = clipped.reduce((sum, point) => sum + point.y, 0) / clipped.length;
+      const outline = convexHull(clipped.map(point => ({ x: point.x - x, y: point.y - y })));
+      if (outline.length < 3 || outline.length > MAX_OUTLINE_VERTICES || polygonArea(outline) <= EPSILON) return {};
+      fragments.push({
+        tileId: piece.tileId, angle: piece.angle, outline,
+        x: piece.x + x * cos - y * sin, y: piece.y + x * sin + y * cos
+      });
+    }
+    return { fragments };
   }
 
   function projectionBounds(points, x, y) {
@@ -1238,6 +1316,25 @@
     return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
   }
 
+  function readPieceOutline(value) {
+    if (!Array.isArray(value) || value.length < 3 || value.length > MAX_OUTLINE_VERTICES) {
+      throw new ValidationError('invalidProject');
+    }
+    const points = value.map(point => {
+      if (!point || !validNumber(point.x, -10000, 10000) || !validNumber(point.y, -10000, 10000)) {
+        throw new ValidationError('invalidProject');
+      }
+      return { x: point.x, y: point.y };
+    });
+    const hull = convexHull(points.slice());
+    const first = points.indexOf(hull[0]);
+    if (hull.length !== points.length || !hull.every((point, i) => point === points[(first + i) % points.length]) ||
+        polygonArea(hull) <= EPSILON || !pointInPolygon({ x: 0, y: 0 }, hull)) {
+      throw new ValidationError('invalidProject');
+    }
+    return points;
+  }
+
   function readProject(value) {
     const error = 'invalidProject';
     if (!value || value.version !== 1 || !validText(value.name, 80)) throw new ValidationError(error);
@@ -1304,6 +1401,7 @@
           !validNumber(piece.x, -5000, 5000) || !validNumber(piece.y, -5000, 5000) ||
           !validNumber(piece.angle, -360, 360)) throw new ValidationError(error);
       const clean = { id: piece.id, tileId: piece.tileId, x: piece.x, y: piece.y, angle: angleInDegrees(piece.angle) };
+      if (piece.outline !== undefined) clean.outline = readPieceOutline(piece.outline);
       const geometry = index.geometry(clean);
       if (!index.accepts(geometry)) throw new ValidationError('invalidPlacements');
       index.add(geometry);
@@ -1317,7 +1415,7 @@
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
     fitsBoard, gridOrigin, guideFromDrag, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    referenceWidthLimit, sampleOutline, sampleSegment, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions
   };
 

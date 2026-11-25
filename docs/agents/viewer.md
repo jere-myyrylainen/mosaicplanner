@@ -7,6 +7,7 @@
 - Keep all scripts loaded by the viewer compatible with Safari on iOS 12, including `geometry.js`, `i18n.js`, and `board-renderer.js`. Keep the `FileReader` file path and SVG `xlink:href` for reference images.
 - Support local selection of a saved project and relative same-origin HTTP or HTTPS URLs passed as `?project=`. Use the shared project reader on both paths and let the latest load win if requests overlap.
 - Render saved board, tile, grout, and visibility state with the shared renderer. Keep zoom controls, scroll-to-pan, and Fit to view usable on narrow touch screens.
+- Render cut pieces and their grout from the saved local outlines using the shared renderer.
 
 ## Check changes
 
