@@ -182,6 +182,9 @@ select {
 .split-snap-marks { fill: none; stroke: #193e9a; stroke-width: 1.15; opacity: .65; vector-effect: non-scaling-stroke; }
 .split-anchor { fill: #193e9a; stroke: var(--paper); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
 .snapped-split-anchor { stroke-width: 1.7; }
+.split-curve-mark, .split-curve-center {
+  fill: #fff; stroke: #15377d; stroke-width: 1.4; vector-effect: non-scaling-stroke;
+}
 .split-end-anchor { fill: #fff; stroke: #15377d; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
 .split-dimension-label {
   fill: #193e9a; stroke: var(--paper); stroke-width: 3; stroke-linejoin: round; paint-order: stroke;

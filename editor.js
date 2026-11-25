@@ -1337,9 +1337,9 @@
       const element = event.target.closest('[data-piece]');
       if (element) erasePiece(gesture, element.dataset.piece);
     } else if (tool === 'split') {
-      const edge = placementIndex.nearestSplitEdge(point, snapDistance);
-      gesture = { kind: 'split', start: point, edge };
-      if (edge) renderSplitMeasurement(layers.preview, { edge });
+      const startTarget = placementIndex.nearestSplitStart(point, snapDistance);
+      gesture = { kind: 'split', start: point, startTarget };
+      renderSplitStart(startTarget);
     } else if (tool === 'fill') {
       fillAt(point, tile);
       return;
@@ -1557,15 +1557,35 @@
     }
   }
 
+  function renderCurveSplitMarks(layer, { curve, marks, point, entry }, locked) {
+    const scale = rulerView.unitsPerPixel;
+    for (const mark of marks) {
+      layer.append(svgElement('circle', {
+        cx: mark.x, cy: mark.y, r: 3 * scale, class: 'split-curve-mark'
+      }));
+    }
+    if (point) layer.append(svgElement('circle', {
+      cx: point.x, cy: point.y, r: (entry ? 2.5 : 3.7) * scale,
+      class: entry ? 'split-anchor' : 'split-anchor snapped-split-anchor'
+    }));
+    if (locked) layer.append(svgElement('circle', {
+      cx: curve.piece.x, cy: curve.piece.y, r: 2.4 * scale, class: 'split-curve-center'
+    }));
+  }
+
+  function renderSplitStart(target) {
+    if (target?.curve) renderCurveSplitMarks(layers.preview, target);
+    else renderSplitMeasurement(layers.preview, { edge: target });
+  }
+
   function previewSplitHover(point) {
-    const edge = placementIndex.nearestSplitEdge(point, snapDistance);
     layers.preview.replaceChildren();
-    if (edge) renderSplitMeasurement(layers.preview, { edge });
+    renderSplitStart(placementIndex.nearestSplitStart(point, snapDistance));
   }
 
   function previewSplit(current, pointer) {
     current.end = pointer;
-    const line = placementIndex.splitLine(current.start, pointer, current.edge, snapDistance);
+    const line = placementIndex.splitLine(current.start, pointer, current.startTarget, snapDistance);
     const { start, end, endAnchor } = line;
     let target;
     let fragments;
@@ -1601,7 +1621,8 @@
       svgElement('line', { ...cutLine, class: 'split-line-halo' }),
       svgElement('line', { ...cutLine, class: fragments ? 'split-line' : 'split-line invalid-split' })
     );
-    renderSplitMeasurement(preview, line);
+    if (line.curveTarget) renderCurveSplitMarks(preview, line.curveTarget, line.locked);
+    else renderSplitMeasurement(preview, line);
     if (endAnchor) preview.append(svgElement('circle', {
       cx: endAnchor.x, cy: endAnchor.y, r: 4 * rulerView.unitsPerPixel, class: 'split-end-anchor'
     }));

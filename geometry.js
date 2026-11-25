@@ -526,6 +526,86 @@
     return { entry, exit, entryEdge };
   }
 
+  function circleLineRange({ piece, radius }, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    const x = piece.x - start.x;
+    const y = piece.y - start.y;
+    const across = (x * dy - y * dx) / length;
+    if (Math.abs(across) >= radius) return;
+    const along = (x * dx + y * dy) / length;
+    const halfChord = Math.sqrt(radius * radius - across * across);
+    return { entry: (along - halfChord) / length, exit: (along + halfChord) / length };
+  }
+
+  function curveSplitMarks({ piece, radius, points }) {
+    if (!radius) return [0, 1, 2, 3].map(index => points[index * CURVE_SEGMENTS / 4]);
+    const angle = piece.angle * Math.PI / 180;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    return [
+      { x: piece.x + x, y: piece.y + y }, { x: piece.x - y, y: piece.y + x },
+      { x: piece.x - x, y: piece.y - y }, { x: piece.x + y, y: piece.y - x }
+    ];
+  }
+
+  function curveSplitStart(curve, pointer, limit) {
+    const marks = curveSplitMarks(curve);
+    const reach = Math.min(limit, Math.hypot(marks[0].x - marks[1].x, marks[0].y - marks[1].y) / 4);
+    let point = nearestGuideAnchor(marks, pointer, reach);
+    const { radius, piece } = curve;
+    if (!point && radius) {
+      const dx = pointer.x - piece.x;
+      const dy = pointer.y - piece.y;
+      const distance = Math.hypot(dx, dy);
+      if (Math.abs(distance - radius) <= Math.min(limit, radius / 2) && distance > EPSILON) {
+        point = { x: piece.x + dx * radius / distance, y: piece.y + dy * radius / distance };
+      }
+    }
+    return { curve, marks, point };
+  }
+
+  function extendSplitStart(start, pivot, end) {
+    const chord = Math.hypot(end.x - pivot.x, end.y - pivot.y);
+    if (chord <= EPSILON) return start;
+    const scale = Math.hypot(start.x - pivot.x, start.y - pivot.y) / chord;
+    return { x: pivot.x - scale * (end.x - pivot.x), y: pivot.y - scale * (end.y - pivot.y) };
+  }
+
+  function curveSplitLine(start, end, target, limit, anchored) {
+    const { point, curve, marks } = target;
+    const { piece: center } = curve;
+    const radius = Math.hypot(center.x - point.x, center.y - point.y);
+    const nx = (center.x - point.x) / radius;
+    const ny = (center.y - point.y) / radius;
+    const depth = (end.x - point.x) * nx + (end.y - point.y) * ny;
+    const drift = Math.abs((end.x - point.x) * ny - (end.y - point.y) * nx);
+    const rawDrift = Math.abs((end.x - start.x) * ny - (end.y - start.y) * nx);
+    const fixedStart = !target.entry;
+    if (fixedStart && depth > EPSILON && Math.min(drift, rawDrift) <= depth * SPLIT_SNAP_SLOPE) {
+      const chord = 2 * radius;
+      const endAnchor = Math.abs(depth - chord) <= Math.min(limit, chord / 4) ?
+        { x: 2 * center.x - point.x, y: 2 * center.y - point.y } : undefined;
+      const finish = endAnchor || { x: point.x + depth * nx, y: point.y + depth * ny };
+      const from = Math.min(0, (start.x - point.x) * nx + (start.y - point.y) * ny);
+      return {
+        start: { x: point.x + from * nx, y: point.y + from * ny },
+        end: finish, curveTarget: target, endAnchor, locked: true
+      };
+    }
+
+    const endAnchor = nearestGuideAnchor(marks.filter(mark => {
+      const chord = Math.hypot(mark.x - point.x, mark.y - point.y);
+      return chord > EPSILON && Math.hypot(end.x - mark.x, end.y - mark.y) <= chord / 4;
+    }), end, limit);
+    const finish = endAnchor || end;
+    let origin = start;
+    if (anchored) origin = point;
+    else if (fixedStart || endAnchor) origin = extendSplitStart(start, point, finish);
+    return { start: origin, end: finish, curveTarget: target, endAnchor };
+  }
+
   function splitEdge(points, index, origin) {
     const first = points[index];
     const last = points[(index + 1) % points.length];
@@ -1184,13 +1264,28 @@
       }
     }
 
-    nearestSplitEdge(point, limit) {
+    nearestSplitStart(point, limit) {
       const bounds = { minX: point.x, maxX: point.x, minY: point.y, maxY: point.y };
       let nearest;
+      let hoveredCurve;
       let best = limit;
       for (const geometry of this.nearby(bounds, limit)) {
-        const { points, curved, minX, maxX, minY, maxY } = geometry;
-        if (!points || curved) continue;
+        const { piece, points, radius, curved, minX, maxX, minY, maxY } = geometry;
+        if (point.x < minX - limit || point.x > maxX + limit ||
+            point.y < minY - limit || point.y > maxY + limit) continue;
+        if (radius || curved) {
+          const target = curveSplitStart(geometry, point, limit);
+          if (target.point) {
+            const distance = Math.hypot(point.x - target.point.x, point.y - target.point.y);
+            if (distance < best) {
+              nearest = target;
+              best = distance;
+            }
+          } else if (radius ? Math.hypot(point.x - piece.x, point.y - piece.y) < radius : pointInPolygon(point, points)) {
+            hoveredCurve = target;
+          }
+          continue;
+        }
         const reach = Math.min(best, (maxX - minX) / 4, (maxY - minY) / 4);
         for (let i = 0; i < points.length; i++) {
           const edge = splitEdge(points, i, point);
@@ -1201,34 +1296,43 @@
           best = distance;
         }
       }
-      return nearest && positionSplitEdge(nearest, nearest.along, limit);
+      return nearest && !nearest.curve ? positionSplitEdge(nearest, nearest.along, limit) : nearest || hoveredCurve;
     }
 
-    firstSplitEdge(start, end) {
+    firstSplitBoundary(start, end, limit) {
       const dx = end.x - start.x;
       const dy = end.y - start.y;
       let first;
       let best = 1;
       for (const piece of this.piecesAlong(start, end)) {
-        const { points, curved } = this.geometry(piece);
-        if (!points || curved) continue;
-        const range = polygonLineRange(points, start, end);
+        const geometry = this.geometry(piece);
+        const { points, radius, curved } = geometry;
+        const range = radius ? circleLineRange(geometry, start, end) : polygonLineRange(points, start, end);
         if (!range || range.entry < 0 || range.entry >= best || range.exit <= range.entry) continue;
         const point = { x: start.x + dx * range.entry, y: start.y + dy * range.entry };
-        const edge = splitEdge(points, range.entryEdge, point);
-        if (!edge) continue;
+        if (radius || curved) {
+          const curve = curveSplitStart(geometry, point, limit);
+          first = curve.point ? curve : { ...curve, point, entry: true };
+        } else {
+          const edge = splitEdge(points, range.entryEdge, point);
+          if (!edge) continue;
+          first = edge;
+        }
         best = range.entry;
-        first = edge;
       }
       return first;
     }
 
-    splitLine(start, end, startEdge, limit = 0) {
+    splitLine(start, end, startTarget, limit = 0) {
       if (Math.hypot(end.x - start.x, end.y - start.y) <= EPSILON) return { start, end };
       const intoEdge = (edge, point) => (point.y - edge.first.y) * edge.tx - (point.x - edge.first.x) * edge.ty;
-      const anchored = startEdge && intoEdge(startEdge, end) > EPSILON;
-      const edge = anchored ? startEdge : this.firstSplitEdge(start, end);
+      const anchored = startTarget && startTarget.point && (startTarget.curve ?
+        (end.x - startTarget.point.x) * (startTarget.curve.piece.x - startTarget.point.x) +
+        (end.y - startTarget.point.y) * (startTarget.curve.piece.y - startTarget.point.y) > EPSILON :
+        intoEdge(startTarget, end) > EPSILON);
+      const edge = anchored ? startTarget : this.firstSplitBoundary(start, end, limit);
       if (!edge) return { start, end };
+      if (edge.curve) return curveSplitLine(start, end, edge, limit, anchored);
 
       const { point, first, length, tx, ty } = edge;
       const depth = intoEdge(edge, end);
