@@ -13,6 +13,7 @@
   const gridNumbers = { size: 'grid-size', weight: 'grid-weight', offsetX: 'grid-offset-x', offsetY: 'grid-offset-y' };
   const gridChecks = { guidesVisible: 'guides-visible', snap: 'grid-snap', snapTiles: 'tile-snap' };
   const editableFields = 'input, select, textarea, [contenteditable="true"]';
+  const boardOnlyTools = new Set([...guideModes, 'moveGrid', 'reference']);
   const SNAP_PIXELS = 8;
   const colorFamilies = [
     'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'white', 'gray', 'black'
@@ -26,17 +27,25 @@
     board: byId('board-layer'),
     worktable: byId('worktable-layer'),
     worktableClip: byId('worktable-clip'),
-    worktableLabel: byId('worktable-label'),
     references: byId('reference-layer'),
     grid: byId('grid-layer'),
     grout: byId('grout-layer'),
     worktableGrout: byId('worktable-grout-layer'),
-    pieces: byId('piece-layer'),
     guides: byId('guide-layer'),
     rulers: byId('ruler-layer'),
-    preview: byId('preview-layer'),
-    selection: byId('selection-layer')
+    preview: byId('preview-layer')
   };
+  const boardView = {
+    canvas, stage, pieces: byId('piece-layer'), selection: byId('selection-layer'),
+    zoom: 1, center: { x: 0, y: 0 }, unitsPerPixel: 1, zoomId: 'zoom'
+  };
+  const tableView = {
+    canvas: byId('worktable-canvas'), stage: byId('worktable-stage'),
+    pieces: byId('worktable-piece-layer'), selection: byId('worktable-selection-layer'),
+    zoom: 1, center: { x: 0, y: 0 }, unitsPerPixel: 1, zoomId: 'worktable-zoom'
+  };
+  const views = [boardView, tableView];
+  const worktablePanel = byId('worktable-panel');
   const boardDialog = byId('board-dialog');
   const gridDialog = byId('grid-dialog');
   const boardShapeInput = byId('board-shape');
@@ -91,17 +100,16 @@
   let creatingProject = false;
   let drawAngle = 0;
   let drawHover;
-  let boardHover;
+  let pointerHover;
+  let previewView = boardView;
+  let worktableVisible = false;
   let placementIndex;
   let gesture = null;
   let spacePressed = false;
   let feedbackTimer;
   let feedbackMessages;
   let feedbackValues;
-  let zoom = 1;
-  let snapDistance = 0;
   let rulerView;
-  let viewCenter = { x: 0, y: 0 };
   let idSequence = 0;
 
   function restoreLibraryOrder() {
@@ -144,8 +152,9 @@
       tool = 'select';
     }
     if (next.worktable !== project.worktable) {
-      zoom = 1;
-      viewCenter = { x: 0, y: 0 };
+      worktableVisible = next.worktable !== undefined;
+      tableView.zoom = 1;
+      tableView.center = { x: 0, y: 0 };
     }
     project = next;
     if (!selectedReference()) activeReferenceId = project.references[0]?.id;
@@ -387,20 +396,23 @@
     const { tileTypes, worktable } = placementIndex;
     const mosaicPieces = [];
     const tablePieces = [];
-    const fragment = document.createDocumentFragment();
+    const mosaicFragment = document.createDocumentFragment();
+    const tableFragment = document.createDocumentFragment();
     pieceElements.clear();
     groutElements.clear();
     for (const piece of project.pieces) {
-      (Model.isOnWorktable(worktable, piece) ? tablePieces : mosaicPieces).push(piece);
+      const onTable = Model.isOnWorktable(worktable, piece);
+      (onTable ? tablePieces : mosaicPieces).push(piece);
       const tile = tileTypes.get(piece.tileId);
       const classes = piece.outline ? 'piece-face cut-piece-face' : 'piece-face';
       const element = pieceShape(piece, tile, { class: classes, fill: tile.color, 'data-piece': piece.id });
       pieceElements.set(piece.id, element);
-      fragment.append(element);
+      (onTable ? tableFragment : mosaicFragment).append(element);
     }
     renderGrout?.({ ...project, pieces: mosaicPieces }, tileTypes, layers.grout, groutElements);
     renderGrout?.({ ...project, pieces: tablePieces }, tileTypes, layers.worktableGrout, groutElements);
-    layers.pieces.replaceChildren(fragment);
+    boardView.pieces.replaceChildren(mosaicFragment);
+    tableView.pieces.replaceChildren(tableFragment);
     renderPieceSummary();
   }
 
@@ -782,12 +794,7 @@
 
   function renderSelection() {
     const pieces = currentSelection();
-    const fragment = document.createDocumentFragment();
-    for (const piece of pieces) {
-      const tile = placementIndex.tileTypes.get(piece.tileId);
-      fragment.append(pieceShape(piece, tile, { class: 'selection-outline' }));
-    }
-    layers.selection.replaceChildren(fragment);
+    paintSelection(pieces);
     renderClipboardControls();
     const showPanel = pieces.length > 0 && !pendingPaste;
     byId('selected-panel').hidden = !showPanel;
@@ -802,43 +809,54 @@
     byId('delete-piece-label').textContent = t(single ? 'deleteTile' : 'deleteSelectedTiles');
   }
 
+  function paintSelection(pieces, invalid = false) {
+    const mosaic = document.createDocumentFragment();
+    const table = document.createDocumentFragment();
+    for (const piece of pieces) {
+      const tile = placementIndex.tileTypes.get(piece.tileId);
+      const target = belongsToView(piece, tableView) ? table : mosaic;
+      target.append(pieceShape(piece, tile, { class: 'selection-outline' }));
+    }
+    boardView.selection.replaceChildren(mosaic);
+    tableView.selection.replaceChildren(table);
+    for (const view of views) view.selection.classList.toggle('invalid-selection', invalid);
+  }
+
   function renderView() {
     const { board } = project;
-    const screenWidth = stage.clientWidth;
-    const screenHeight = stage.clientHeight;
-    if (!screenWidth || !screenHeight) return;
-    const rulerGutter = Math.min(52, screenWidth / 8);
-    const fitWidth = Math.max(screenWidth - 2 * rulerGutter, screenWidth / 2);
-    const fitHeight = Math.max(screenHeight - 2 * rulerGutter, screenHeight / 2);
+    renderSurfaceView(boardView, board.width, board.height);
     const table = placementIndex?.worktable;
-    const right = table?.maxX ?? board.width / 2;
-    const workspaceWidth = right + board.width / 2;
-    const workspaceHeight = Math.max(board.height, project.worktable ?? 0);
-    const margin = Math.max(board.width, board.height) * .12;
-    const unitsPerPixel = Math.max((workspaceWidth + margin) / fitWidth, (workspaceHeight + margin) / fitHeight) / zoom;
+    if (table && worktableVisible) {
+      renderSurfaceView(tableView, project.worktable, project.worktable, (table.minX + table.maxX) / 2);
+    }
+  }
+
+  function renderSurfaceView(view, surfaceWidth, surfaceHeight, centerX = 0) {
+    const screenWidth = view.canvas.clientWidth;
+    const screenHeight = view.canvas.clientHeight;
+    if (!screenWidth || !screenHeight) return;
+    const gutter = view === boardView ? Math.min(52, screenWidth / 8) : 10;
+    const fitWidth = Math.max(screenWidth - 2 * gutter, screenWidth / 2);
+    const fitHeight = Math.max(screenHeight - 2 * gutter, screenHeight / 2);
+    const margin = view === boardView ? Math.max(surfaceWidth, surfaceHeight) * .12 : 0;
+    const unitsPerPixel = Math.max((surfaceWidth + margin) / fitWidth, (surfaceHeight + margin) / fitHeight) / view.zoom;
     const width = screenWidth * unitsPerPixel;
     const height = screenHeight * unitsPerPixel;
-    snapDistance = SNAP_PIXELS * unitsPerPixel;
-    canvas.setAttribute('viewBox', [
-      viewCenter.x + (right - board.width / 2) / 2 - width / 2, viewCenter.y - height / 2, width, height
+    view.unitsPerPixel = unitsPerPixel;
+    view.canvas.setAttribute('viewBox', [
+      view.center.x + centerX - width / 2, view.center.y - height / 2, width, height
     ].join(' '));
-    if (layers.worktableLabel) {
-      layers.worktableLabel.textContent = table ? t('worktable') : '';
-      if (table) {
-        layers.worktableLabel.setAttribute('x', (table.minX + table.maxX) / 2);
-        layers.worktableLabel.setAttribute('y', table.minY - 9 * unitsPerPixel);
-        layers.worktableLabel.setAttribute('font-size', Math.min(12 * unitsPerPixel, project.worktable / 6));
-      }
-    }
+    byId(view.zoomId + '-level').textContent = I18n.percent(view.zoom);
+    byId(view.zoomId + '-in').disabled = view.zoom >= 12;
+    byId(view.zoomId + '-out').disabled = view.zoom <= .25;
+    if (view !== boardView) return;
+
+    const { board } = project;
     const language = document.documentElement.lang;
-    if (rulerView?.board !== board || rulerView.unitsPerPixel !== unitsPerPixel || rulerView.language !== language) {
-      const anchors = rulerView?.board === board ? rulerView.anchors : Model.boardGuideAnchors(board);
-      renderBoardRulers(layers.rulers, board, anchors, unitsPerPixel, I18n.number);
-      rulerView = { board, anchors, unitsPerPixel, language };
-    }
-    byId('zoom-level').textContent = I18n.percent(zoom);
-    byId('zoom-in').disabled = zoom >= 12;
-    byId('zoom-out').disabled = zoom <= .25;
+    if (rulerView?.board === board && rulerView.unitsPerPixel === unitsPerPixel && rulerView.language === language) return;
+    const anchors = rulerView?.board === board ? rulerView.anchors : Model.boardGuideAnchors(board);
+    renderBoardRulers(layers.rulers, board, anchors, unitsPerPixel, I18n.number);
+    rulerView = { board, anchors, unitsPerPixel, language };
   }
 
   function renderAll() {
@@ -849,10 +867,10 @@
     renderPieces();
     renderLibrary();
     renderSelection();
+    renderWorktablePanel();
     renderView();
     byId('undo').disabled = past.length === 0;
     byId('redo').disabled = future.length === 0;
-    worktableButton?.setAttribute('aria-pressed', String(Boolean(placementIndex.worktable)));
   }
 
   function toolAvailable(name) {
@@ -877,7 +895,7 @@
 
   function renderTools() {
     if (!toolAvailable(tool)) tool = 'select';
-    stage.dataset.tool = tool;
+    for (const view of views) view.stage.dataset.tool = tool;
     document.querySelectorAll('[data-tool].tool').forEach(button => {
       button.setAttribute('aria-pressed', button.dataset.tool === tool);
       button.disabled = !toolAvailable(button.dataset.tool);
@@ -909,13 +927,35 @@
 
   function toggleWorktable() {
     if (gesture) return;
-    const table = placementIndex.worktable;
-    if (table && project.pieces.some(piece => Model.isOnWorktable(table, piece))) {
-      notify('worktableOccupied');
+    if (!placementIndex.worktable) {
+      const worktable = Math.max(48, Math.round(Math.min(project.board.width, project.board.height) * .42));
+      commit({ ...project, worktable });
       return;
     }
-    const worktable = table ? undefined : Math.max(48, Math.round(Math.min(project.board.width, project.board.height) * .42));
-    commit({ ...project, worktable });
+    worktableVisible = !worktableVisible;
+    if (!worktableVisible) {
+      applySelection(new Set(currentSelection().filter(piece => belongsToView(piece, boardView)).map(piece => piece.id)));
+    }
+    drawHover = pointerHover = undefined;
+    setPreviewView(boardView);
+    layers.preview.replaceChildren();
+    renderWorktablePanel();
+    renderView();
+  }
+
+  function renderWorktablePanel() {
+    const label = worktableVisible ? 'hideWorktable' : 'showWorktable';
+    if (!worktableVisible) {
+      if (previewView === tableView) setPreviewView(boardView);
+      if (pointerHover?.view === tableView) pointerHover = undefined;
+      if (drawHover?.view === tableView) drawHover = undefined;
+    }
+    worktablePanel.hidden = !worktableVisible;
+    editor.classList.toggle('worktable-open', worktableVisible);
+    worktableButton.setAttribute('aria-expanded', String(worktableVisible));
+    worktableButton.dataset.title = worktableButton.dataset.ariaLabel = label;
+    worktableButton.title = t(label);
+    worktableButton.setAttribute('aria-label', t(label));
   }
 
   function changeBoard(board) {
@@ -1228,16 +1268,36 @@
     if (shouldStartDrawing && !selectedIds.size) setTool('draw');
   }
 
-  function surfacePoint(event) {
-    const matrix = canvas.getScreenCTM();
-    const point = canvas.createSVGPoint();
+  function belongsToView(point, view) {
+    return Model.isOnWorktable(placementIndex.worktable, point) === (view === tableView);
+  }
+
+  function setPreviewView(view) {
+    if (view === previewView) return;
+    layers.preview.replaceChildren();
+    view.canvas.insertBefore(layers.preview, view.selection);
+    previewView = view;
+  }
+
+  function viewUnderPointer(event) {
+    const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest('.drawing-canvas');
+    return views.find(view => view.canvas === hit);
+  }
+
+  function surfacePoint(event, view = previewView) {
+    const matrix = view.canvas.getScreenCTM();
+    const point = view.canvas.createSVGPoint();
     point.x = event.clientX;
     point.y = event.clientY;
     return point.matrixTransform(matrix.inverse());
   }
 
+  function snapDistance() {
+    return SNAP_PIXELS * previewView.unitsPerPixel;
+  }
+
   function guideAnchorAt(point) {
-    return rulerView && Model.nearestGuideAnchor(rulerView.anchors, point, snapDistance);
+    return rulerView && Model.nearestGuideAnchor(rulerView.anchors, point, snapDistance());
   }
 
   function markGuideAnchor(anchor) {
@@ -1248,7 +1308,7 @@
   }
 
   function snappedGeometry(piece, index = placementIndex, accepts = candidate => index.accepts(candidate)) {
-    return index.snapPlacement(project, piece, snapDistance, accepts);
+    return index.snapPlacement(project, piece, snapDistance(), accepts);
   }
 
   function pieceAt(center, tile, angle) {
@@ -1256,7 +1316,7 @@
   }
 
   function placeCandidate(action, point, useSnapping) {
-    if (action.placed.length >= action.limit) return;
+    if (action.placed.length >= action.limit || !belongsToView(point, previewView)) return;
     const candidate = pieceAt(point, action.tile, action.angle);
     const geometry = useSnapping ?
       snappedGeometry(candidate, placementIndex, target => action.index.accepts(target)) : action.index.geometry(candidate);
@@ -1300,17 +1360,18 @@
     const tile = action?.tile ?? placementIndex.tileTypes.get(activeTileId);
     const index = action?.index ?? placementIndex;
     const last = action && action.placed[action.placed.length - 1];
-    const accepts = geometry => (last && Math.hypot(geometry.piece.x - last.x, geometry.piece.y - last.y) < 1e-7) ||
-      index.accepts(geometry);
+    const accepts = geometry => belongsToView(geometry.piece, previewView) &&
+      ((last && Math.hypot(geometry.piece.x - last.x, geometry.piece.y - last.y) < 1e-7) || index.accepts(geometry));
     const geometry = snappedGeometry(pieceAt(point, tile, action?.angle ?? drawAngle), placementIndex, accepts);
     const blocked = !accepts(geometry);
     const pieces = action?.placed ?? (blocked ? [] : [geometry.piece]);
     previewPieces(pieces, tile, { blocked: blocked ? geometry.piece : undefined });
   }
 
-  function previewDrawHover(event) {
-    drawHover = { clientX: event.clientX, clientY: event.clientY };
-    previewDrawPlacement(surfacePoint(drawHover));
+  function previewDrawHover(event, view = previewView) {
+    drawHover = { clientX: event.clientX, clientY: event.clientY, view };
+    setPreviewView(view);
+    previewDrawPlacement(surfacePoint(drawHover, view));
   }
 
   function fillAt(point, tile) {
@@ -1320,7 +1381,10 @@
       return;
     }
     const start = snappedGeometry(pieceAt(point, tile, action.angle)).piece;
-    const onTable = Model.isOnWorktable(action.index.worktable, start);
+    if (!belongsToView(start, previewView)) {
+      notify('fillStartBlocked');
+      return;
+    }
     const horizontal = tile.width + project.seam;
     const vertical = tile.height + project.seam;
     const queue = [[0, 0]];
@@ -1330,7 +1394,6 @@
       const [column, row] = queue[i];
       const previousCount = action.placed.length;
       const candidate = { x: start.x + column * horizontal, y: start.y + row * vertical };
-      if (Model.isOnWorktable(action.index.worktable, candidate) !== onTable) continue;
       placeCandidate(action, candidate, false);
       if (action.placed.length === previousCount) continue;
       for (const [dx, dy] of directions) {
@@ -1373,25 +1436,27 @@
     return { kind: 'marquee', origin, original, base };
   }
 
-  function beginPointer(event) {
+  function beginPointer(event, view) {
     if (gesture || (event.button !== 0 && event.button !== 1)) return;
     if (dialogs.some(dialog => dialog.open)) return;
+    const pan = tool === 'pan' || spacePressed || event.button === 1;
+    if (view === tableView && !pan && boardOnlyTools.has(tool)) return;
     const focused = document.activeElement;
     if ((drawAngleInput && focused === drawAngleInput) ||
         ((tool === 'select' || tool === 'split' || pendingPaste) && focused?.closest(editableFields))) focused.blur();
     drawHover = undefined;
-    const point = surfacePoint(event);
-    const pan = tool === 'pan' || spacePressed || event.button === 1;
+    setPreviewView(view);
+    const point = surfacePoint(event, view);
     const tile = placementIndex.tileTypes.get(activeTileId);
     layers.preview.replaceChildren();
 
     if (pan) {
-      const screenMatrix = canvas.getScreenCTM();
+      const screenMatrix = view.canvas.getScreenCTM();
       gesture = {
-        kind: 'pan', screenX: event.clientX, screenY: event.clientY, viewCenter: { ...viewCenter },
+        kind: 'pan', screenX: event.clientX, screenY: event.clientY, center: { ...view.center },
         scaleX: screenMatrix.a, scaleY: screenMatrix.d
       };
-      stage.classList.add('is-panning');
+      view.stage.classList.add('is-panning');
     } else if (tool === 'select') {
       gesture = beginSelection(event, point);
       if (!gesture) return;
@@ -1407,7 +1472,7 @@
       gesture = { kind: 'guide', start: anchor || point, anchor, shape };
       markGuideAnchor(anchor);
     } else if (tool === 'guideErase') {
-      const nearest = Model.nearestGuide(project.guides, point, snapDistance);
+      const nearest = Model.nearestGuide(project.guides, point, snapDistance());
       if (nearest) {
         const guides = project.guides.filter((guide, index) => index !== nearest.index);
         commit({ ...project, guides });
@@ -1418,7 +1483,7 @@
       const element = event.target.closest('[data-piece]');
       if (element) erasePiece(gesture, element.dataset.piece);
     } else if (tool === 'split') {
-      const startTarget = placementIndex.nearestSplitStart(point, snapDistance);
+      const startTarget = placementIndex.nearestSplitStart(point, snapDistance(), piece => belongsToView(piece, view));
       gesture = { kind: 'split', start: point, startTarget };
       renderSplitStart(startTarget);
     } else if (tool === 'fill') {
@@ -1436,8 +1501,11 @@
     } else {
       gesture = { kind: tool, start: snappedGeometry(pieceAt(point, tile, 0)).piece, lastPoint: point, tile };
     }
+    gesture.view = view;
+    gesture.screenX = event.clientX;
+    gesture.screenY = event.clientY;
     gesture.pointerId = event.pointerId;
-    canvas.setPointerCapture(event.pointerId);
+    view.canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
   }
 
@@ -1468,7 +1536,9 @@
       x: minX, y: minY, width: maxX - minX, height: maxY - minY, class: 'selection-marquee'
     }));
     const ids = new Set(base);
-    for (const piece of placementIndex.piecesWithin({ minX, minY, maxX, maxY })) ids.add(piece.id);
+    for (const piece of placementIndex.piecesWithin({ minX, minY, maxX, maxY })) {
+      if (belongsToView(piece, current.view)) ids.add(piece.id);
+    }
     applySelection(ids);
   }
 
@@ -1479,6 +1549,7 @@
   function groupPlacement({ anchor, pieces }, index, desiredOffset, canStay = false) {
     const offsetFromAnchor = point => ({ x: point.x - anchor.x, y: point.y - anchor.y });
     const accepts = candidate => {
+      if (!belongsToView(candidate.piece, previewView)) return false;
       const offset = offsetFromAnchor(candidate.piece);
       if (canStay && !offset.x && !offset.y) return true;
       return index.accepts(candidate) && pieces.every(piece => piece === anchor ||
@@ -1489,7 +1560,14 @@
   }
 
   function previewMove(current, point) {
-    const { anchor, origin, pieces } = current;
+    const { origin, pieces } = current;
+    if (!point) {
+      if (current.index) {
+        current.valid = false;
+        paintSelection([]);
+      }
+      return;
+    }
     const dx = point.x - origin.x;
     const dy = point.y - origin.y;
     if (!current.index && Math.hypot(dx, dy) < .4) return;
@@ -1498,21 +1576,18 @@
       for (const piece of pieces) markPiece(piece.id, 'moving-piece', true);
     }
     const { offset, valid } = groupPlacement(current, current.index, { x: dx, y: dy }, true);
-    if (offset.x === current.offset?.x && offset.y === current.offset?.y) return;
+    if (offset.x === current.offset?.x && offset.y === current.offset?.y && valid === current.valid) return;
     current.offset = offset;
     current.valid = valid;
-    layers.selection.setAttribute('transform', 'translate(' + offset.x + ' ' + offset.y + ')');
-    layers.selection.classList.toggle('invalid-selection', !current.valid);
+    paintSelection(pieces.map(piece => translatePiece(piece, offset)), !valid);
   }
 
   function finishMove(current, released) {
     if (!current.index) return;
-    layers.selection.removeAttribute('transform');
-    layers.selection.classList.remove('invalid-selection');
     for (const piece of current.pieces) markPiece(piece.id, 'moving-piece', false);
-    if (!released || (!current.offset.x && !current.offset.y)) return;
-    if (!current.valid) {
-      notify(current.pieces.length === 1 ? 'tilePlacementBlocked' : 'tilesPlacementBlocked');
+    if (!released || !current.valid || (!current.offset.x && !current.offset.y)) {
+      paintSelection(current.pieces);
+      if (released && !current.valid) notify(current.pieces.length === 1 ? 'tilePlacementBlocked' : 'tilesPlacementBlocked');
       return;
     }
     const pieces = project.pieces.map(piece => selectedIds.has(piece.id) ? translatePiece(piece, current.offset) : piece);
@@ -1538,7 +1613,10 @@
     if (error) notify(error);
     else {
       setTool('paste');
-      if (boardHover && !spacePressed) previewPaste(surfacePoint(boardHover));
+      if (pointerHover && !spacePressed) {
+        setPreviewView(pointerHover.view);
+        previewPaste(surfacePoint(pointerHover));
+      }
     }
     return true;
   }
@@ -1578,7 +1656,7 @@
 
   function finishPaste(placement) {
     if (!pendingPaste) return;
-    if (!placement.valid) {
+    if (!placement?.valid) {
       notify('pastePlacementBlocked');
       return;
     }
@@ -1595,7 +1673,7 @@
 
   function renderSplitMeasurement(layer, { edge, locked }) {
     if (!edge) return;
-    const scale = rulerView.unitsPerPixel;
+    const scale = previewView.unitsPerPixel;
     const { first, along, length, tx, ty, point, fraction } = edge;
     const at = (distance, offset) => [
       first.x + distance * tx + offset * ty, first.y + distance * ty - offset * tx
@@ -1639,7 +1717,7 @@
   }
 
   function renderCurveSplitMarks(layer, { curve, marks, point, entry }, locked) {
-    const scale = rulerView.unitsPerPixel;
+    const scale = previewView.unitsPerPixel;
     for (const mark of marks) {
       layer.append(svgElement('circle', {
         cx: mark.x, cy: mark.y, r: 3 * scale, class: 'split-curve-mark'
@@ -1661,17 +1739,19 @@
 
   function previewSplitHover(point) {
     layers.preview.replaceChildren();
-    renderSplitStart(placementIndex.nearestSplitStart(point, snapDistance));
+    renderSplitStart(placementIndex.nearestSplitStart(point, snapDistance(), piece => belongsToView(piece, previewView)));
   }
 
   function previewSplit(current, pointer) {
     current.end = pointer;
-    const line = placementIndex.splitLine(current.start, pointer, current.startTarget, snapDistance);
+    const acceptsPiece = piece => belongsToView(piece, current.view);
+    const line = placementIndex.splitLine(current.start, pointer, current.startTarget, snapDistance(), acceptsPiece);
     const { start, end, endAnchor } = line;
     let target;
     let fragments;
     let error = 'splitAcrossTile';
     for (const piece of placementIndex.piecesAlong(start, end)) {
+      if (!acceptsPiece(piece)) continue;
       const tile = placementIndex.tileTypes.get(piece.tileId);
       const cut = Model.splitPiece(tile, piece, start, end);
       if (!cut) continue;
@@ -1705,7 +1785,7 @@
     if (line.curveTarget) renderCurveSplitMarks(preview, line.curveTarget, line.locked);
     else renderSplitMeasurement(preview, line);
     if (endAnchor) preview.append(svgElement('circle', {
-      cx: endAnchor.x, cy: endAnchor.y, r: 4 * rulerView.unitsPerPixel, class: 'split-end-anchor'
+      cx: endAnchor.x, cy: endAnchor.y, r: 4 * previewView.unitsPerPixel, class: 'split-end-anchor'
     }));
     layers.preview.replaceChildren(preview);
   }
@@ -1724,17 +1804,26 @@
     const current = gesture;
     if (!current || current.pointerId !== event.pointerId) return;
     if (current.kind === 'pan') {
-      viewCenter.x = current.viewCenter.x - (event.clientX - current.screenX) / current.scaleX;
-      viewCenter.y = current.viewCenter.y - (event.clientY - current.screenY) / current.scaleY;
+      current.view.center.x = current.center.x - (event.clientX - current.screenX) / current.scaleX;
+      current.view.center.y = current.center.y - (event.clientY - current.screenY) / current.scaleY;
       renderView();
       return;
     }
-    const point = surfacePoint(event);
-    if (current.kind === 'paste') {
-      if (pendingPaste) current.placement = previewPaste(point);
-    } else if (current.kind === 'move') {
-      previewMove(current, point);
-    } else if (current.kind === 'marquee') {
+    if (current.kind === 'move' || current.kind === 'paste') {
+      if (current.kind === 'move' && !current.index &&
+          Math.hypot(event.clientX - current.screenX, event.clientY - current.screenY) < 2) return;
+      const destination = viewUnderPointer(event);
+      if (destination) setPreviewView(destination);
+      const point = destination && surfacePoint(event, destination);
+      if (current.kind === 'move') previewMove(current, point);
+      else if (pendingPaste) {
+        current.placement = point ? previewPaste(point) : undefined;
+        if (!point) layers.preview.replaceChildren();
+      }
+      return;
+    }
+    const point = surfacePoint(event, current.view);
+    if (current.kind === 'marquee') {
       updateMarquee(current, point);
     } else if (current.kind === 'guide') {
       const anchor = current.shape === 'line' ? guideAnchorAt(point) : undefined;
@@ -1762,7 +1851,9 @@
       paintGridPosition({ ...grid, ...current.position });
     } else if (current.kind === 'erase') {
       if (point.x === current.previous.x && point.y === current.previous.y) return;
-      for (const piece of placementIndex.piecesAlong(current.previous, point)) erasePiece(current, piece.id);
+      for (const piece of placementIndex.piecesAlong(current.previous, point)) {
+        if (belongsToView(piece, current.view)) erasePiece(current, piece.id);
+      }
       current.previous = point;
     } else if (current.kind === 'split') {
       previewSplit(current, point);
@@ -1784,17 +1875,22 @@
     }
   }
 
-  function movePointer(event) {
-    if (event.pointerType !== 'touch') boardHover = { clientX: event.clientX, clientY: event.clientY };
-    if (gesture) updateGesture(event);
-    else if (pendingPaste && !spacePressed) previewPaste(surfacePoint(event));
-    else if (tool === 'draw' && !spacePressed) previewDrawHover(event);
-    else if (tool === 'split' && !spacePressed && event.pointerType !== 'touch') previewSplitHover(surfacePoint(event));
-    else if (tool === 'guideLine' && !spacePressed) {
+  function movePointer(event, view) {
+    if (gesture) {
+      updateGesture(event);
+      return;
+    }
+    if (event.pointerType !== 'touch') pointerHover = { clientX: event.clientX, clientY: event.clientY, view };
+    if (spacePressed || (view === tableView && boardOnlyTools.has(tool))) return;
+    setPreviewView(view);
+    if (pendingPaste) previewPaste(surfacePoint(event));
+    else if (tool === 'draw') previewDrawHover(event, view);
+    else if (tool === 'split' && event.pointerType !== 'touch') previewSplitHover(surfacePoint(event));
+    else if (tool === 'guideLine') {
       layers.preview.replaceChildren();
       markGuideAnchor(guideAnchorAt(surfacePoint(event)));
-    } else if (tool === 'guideErase' && !spacePressed) {
-      const nearest = Model.nearestGuide(project.guides, surfacePoint(event), snapDistance);
+    } else if (tool === 'guideErase') {
+      const nearest = Model.nearestGuide(project.guides, surfacePoint(event), snapDistance());
       layers.preview.replaceChildren();
       if (nearest) layers.preview.append(guideShape(project.guides[nearest.index], { stroke: '#a34032' }));
     }
@@ -1805,7 +1901,7 @@
     const current = gesture;
     if (event.type === 'pointerup') updateGesture(event);
     gesture = null;
-    stage.classList.remove('is-panning');
+    current.view.stage.classList.remove('is-panning');
     if (current.kind === 'paste' && event.type === 'pointerup') {
       finishPaste(current.placement);
       return;
@@ -1856,7 +1952,7 @@
       if (current.action.placed.length) finishPlacement(current.action);
       else {
         notify('tilePlacementBlocked');
-        if (event.pointerType !== 'touch') previewDrawHover(event);
+        if (event.pointerType !== 'touch') previewDrawHover(event, current.view);
       }
       return;
     }
@@ -1895,26 +1991,33 @@
     commit({ ...project, pieces });
   }
 
-  function resetView() {
-    zoom = 1;
-    viewCenter = { x: 0, y: 0 };
+  function resetView(view = boardView) {
+    if (gesture) return;
+    view.zoom = 1;
+    view.center = { x: 0, y: 0 };
     renderView();
+    if (view === previewView) layers.preview.replaceChildren();
   }
 
-  function changeZoom(factor, event) {
+  function changeZoom(view, factor, event) {
+    if (gesture) return;
+    const { zoom } = view;
     const nextZoom = Math.min(12, Math.max(.25, zoom * factor));
     if (event && zoom !== nextZoom) {
-      const point = surfacePoint(event);
+      const point = surfacePoint(event, view);
       const ratio = zoom / nextZoom;
-      const { x, y, width, height } = canvas.viewBox.baseVal;
-      viewCenter.x += (point.x - (x + width / 2)) * (1 - ratio);
-      viewCenter.y += (point.y - (y + height / 2)) * (1 - ratio);
+      const { x, y, width, height } = view.canvas.viewBox.baseVal;
+      view.center.x += (point.x - (x + width / 2)) * (1 - ratio);
+      view.center.y += (point.y - (y + height / 2)) * (1 - ratio);
     }
-    zoom = nextZoom;
+    view.zoom = nextZoom;
     renderView();
-    layers.preview.replaceChildren();
-    if (pendingPaste && event && !spacePressed) previewPaste(surfacePoint(event));
-    else if (tool === 'split' && event && !spacePressed) previewSplitHover(surfacePoint(event));
+    if (view === previewView) layers.preview.replaceChildren();
+    if (event && !spacePressed && (pendingPaste || tool === 'split')) {
+      setPreviewView(view);
+      if (pendingPaste) previewPaste(surfacePoint(event));
+      else previewSplitHover(surfacePoint(event));
+    }
   }
 
   function exportProject() {
@@ -1957,6 +2060,8 @@
     selectedIds.clear();
     clearLibraryFilters();
     resetView();
+    resetView(tableView);
+    worktableVisible = restored.worktable !== undefined;
     commit(restored);
     setTool('draw');
     notify('projectOpened');
@@ -2009,7 +2114,7 @@
       event.preventDefault();
       spacePressed = true;
       drawHover = undefined;
-      stage.classList.add('pan-ready');
+      for (const view of views) view.stage.classList.add('pan-ready');
       layers.preview.replaceChildren();
       return;
     }
@@ -2024,9 +2129,9 @@
 
   function returnToSelection() {
     if (gesture) {
-      const { pointerId } = gesture;
+      const { pointerId, view } = gesture;
       endPointer({ type: 'pointercancel', pointerId });
-      if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      if (view.canvas.hasPointerCapture(pointerId)) view.canvas.releasePointerCapture(pointerId);
     }
     stopSpacePan();
     if (pendingPaste) {
@@ -2039,13 +2144,13 @@
 
   function stopSpacePan() {
     spacePressed = false;
-    stage.classList.remove('pan-ready');
+    for (const view of views) view.stage.classList.remove('pan-ready');
   }
 
   function changeDrawAngle(angle) {
     if (gesture || !Number.isFinite(angle)) return;
     drawAngle = (Math.round(Model.angleInDegrees(angle) * 10) % 3600) / 10;
-    if (tool === 'draw' && drawHover && !spacePressed) previewDrawPlacement(surfacePoint(drawHover));
+    if (tool === 'draw' && drawHover && !spacePressed) previewDrawHover(drawHover, drawHover.view);
   }
 
   function rotateByStep() {
@@ -2067,7 +2172,10 @@
     renderSelection();
     renderView();
     if (gesture?.kind === 'split' && gesture.end) previewSplit(gesture, gesture.end);
-    else if (tool === 'split' && boardHover && !spacePressed) previewSplitHover(surfacePoint(boardHover));
+    else if (tool === 'split' && pointerHover && !spacePressed) {
+      setPreviewView(pointerHover.view);
+      previewSplitHover(surfacePoint(pointerHover));
+    }
     if (saveStatus) setSaveStatus(saveStatus);
     if (!byId('feedback').hidden) renderFeedback();
   });
@@ -2105,10 +2213,7 @@
   tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
-  worktableButton?.addEventListener('click', () => {
-    closeDisclosures(true);
-    toggleWorktable();
-  });
+  worktableButton.addEventListener('click', toggleWorktable);
   copyTilesButton?.addEventListener('click', copySelection);
   pasteTilesButton?.addEventListener('click', () => {
     if (pendingPaste) setTool('select');
@@ -2137,9 +2242,6 @@
     }
   });
   byId('delete-piece').addEventListener('click', removeSelected);
-  byId('zoom-in').addEventListener('click', () => changeZoom(1.25));
-  byId('zoom-out').addEventListener('click', () => changeZoom(.8));
-  byId('zoom-fit').addEventListener('click', resetView);
   byId('new-project').addEventListener('click', () => openBoardSettings(true));
   byId('edit-board').addEventListener('click', () => openBoardSettings(false));
   byId('edit-grid').addEventListener('click', openGridSettings);
@@ -2172,27 +2274,33 @@
     closeDisclosures(false, event.target.closest('.app-menu, .status-popover'));
   });
 
-  stage.addEventListener('wheel', event => {
-    if (gesture || event.target.closest('.zoom-controls')) return;
-    event.preventDefault();
-    changeZoom(Math.exp(Math.min(.25, Math.max(-.25, -event.deltaY * .002))), event);
-  }, { passive: false });
-  canvas.addEventListener('pointerdown', beginPointer);
-  canvas.addEventListener('pointermove', movePointer);
-  canvas.addEventListener('pointerup', endPointer);
-  canvas.addEventListener('pointercancel', endPointer);
-  canvas.addEventListener('lostpointercapture', endPointer);
-  canvas.addEventListener('pointerleave', () => {
-    drawHover = undefined;
-    boardHover = undefined;
-    if (!gesture) layers.preview.replaceChildren();
-  });
+  const viewObserver = new ResizeObserver(renderView);
+  for (const view of views) {
+    byId(view.zoomId + '-in').addEventListener('click', () => changeZoom(view, 1.25));
+    byId(view.zoomId + '-out').addEventListener('click', () => changeZoom(view, .8));
+    byId(view.zoomId + '-fit').addEventListener('click', () => resetView(view));
+    view.stage.addEventListener('wheel', event => {
+      if (gesture || event.target.closest('.zoom-controls')) return;
+      event.preventDefault();
+      changeZoom(view, Math.exp(Math.min(.25, Math.max(-.25, -event.deltaY * .002))), event);
+    }, { passive: false });
+    view.canvas.addEventListener('pointerdown', event => beginPointer(event, view));
+    view.canvas.addEventListener('pointermove', event => movePointer(event, view));
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      view.canvas.addEventListener(type, endPointer);
+    }
+    view.canvas.addEventListener('pointerleave', () => {
+      if (drawHover?.view === view) drawHover = undefined;
+      if (pointerHover?.view === view) pointerHover = undefined;
+      if (!gesture && previewView === view) layers.preview.replaceChildren();
+    });
+    viewObserver.observe(view.stage);
+  }
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('keyup', event => {
     if (event.code === 'Space') stopSpacePan();
   });
   window.addEventListener('blur', stopSpacePan);
-  new ResizeObserver(renderView).observe(stage);
 
   async function initialize() {
     try {

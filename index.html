@@ -6,12 +6,12 @@
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fcfdfa">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#242a26">
   <title>Mosaic Planner</title>
-  <link rel="stylesheet" href="styles.css?v=19">
-  <script defer src="i18n.js?v=21"></script>
-  <script defer src="geometry.js?v=25"></script>
+  <link rel="stylesheet" href="styles.css?v=20">
+  <script defer src="i18n.js?v=22"></script>
+  <script defer src="geometry.js?v=26"></script>
   <script defer src="board-renderer.js?v=9"></script>
   <script defer src="project-storage.js?v=1"></script>
-  <script defer src="editor.js?v=23"></script>
+  <script defer src="editor.js?v=24"></script>
 </head>
 <body inert>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -77,7 +77,6 @@
         <summary class="button quiet"><span data-text="viewMenu"></span><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
         <div class="menu-panel">
           <label class="check-field"><input type="checkbox" id="guides-visible"><span data-text="showGuides"></span></label>
-          <button type="button" id="toggle-worktable" class="button tool quiet" aria-controls="worktable-layer" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-worktable"/></svg><span data-text="worktable"></span></button>
         </div>
       </details>
     </nav>
@@ -142,25 +141,22 @@
           <button type="button" id="undo" class="icon-button" data-title="undoTitle" data-aria-label="undo"><svg class="icon"><use href="#i-undo"/></svg></button>
           <button type="button" id="redo" class="icon-button" data-title="redoTitle" data-aria-label="redo"><svg class="icon"><use href="#i-redo"/></svg></button>
         </div>
+        <button type="button" id="toggle-worktable" class="button quiet worktable-toggle" aria-controls="worktable-panel" aria-expanded="false" data-title="showWorktable" data-aria-label="showWorktable"><svg class="icon" aria-hidden="true"><use href="#i-worktable"/></svg><span data-text="worktable"></span></button>
       </div>
 
       <div class="stage" id="stage" data-tool="draw">
-        <svg id="canvas" xmlns="http://www.w3.org/2000/svg" data-aria-label="canvas" role="img">
+        <svg id="canvas" class="drawing-canvas" xmlns="http://www.w3.org/2000/svg" data-aria-label="canvas" role="img">
           <defs>
             <pattern id="grid-pattern" patternUnits="userSpaceOnUse"><path id="grid-lines" fill="none" stroke="#59695e" stroke-opacity=".28"/></pattern>
             <clipPath id="board-clip"></clipPath>
-            <clipPath id="worktable-clip"></clipPath>
           </defs>
           <g id="board-layer"></g>
-          <g id="worktable-layer"></g>
           <g id="reference-layer" clip-path="url(#board-clip)" pointer-events="none"></g>
           <g id="grid-layer" pointer-events="none"></g>
           <g id="grout-layer" clip-path="url(#board-clip)" pointer-events="none" aria-hidden="true"></g>
-          <g id="worktable-grout-layer" clip-path="url(#worktable-clip)" pointer-events="none" aria-hidden="true"></g>
           <g id="piece-layer"></g>
           <g id="guide-layer" pointer-events="none" aria-hidden="true"></g>
           <g id="ruler-layer" pointer-events="none" aria-hidden="true"></g>
-          <text id="worktable-label" class="worktable-label" text-anchor="middle" pointer-events="none" aria-hidden="true"></text>
           <g id="preview-layer" pointer-events="none"></g>
           <g id="selection-layer" pointer-events="none"></g>
         </svg>
@@ -173,6 +169,27 @@
         </div>
       </div>
     </section>
+
+    <aside class="worktable-panel sidebar" id="worktable-panel" aria-labelledby="worktable-heading" hidden>
+      <div class="worktable-heading">
+        <h2 id="worktable-heading" data-text="worktable"></h2>
+        <div class="button-group worktable-zoom" role="group" data-aria-label="worktableZoomControls">
+          <button type="button" id="worktable-zoom-out" class="icon-button" data-title="zoomOut" data-aria-label="zoomOut"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+          <output id="worktable-zoom-level" data-aria-label="zoom">100 %</output>
+          <button type="button" id="worktable-zoom-in" class="icon-button" data-title="zoomIn" data-aria-label="zoomIn"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <button type="button" id="worktable-zoom-fit" class="icon-button" data-title="fitView" data-aria-label="fitView"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg></button>
+        </div>
+      </div>
+      <div class="stage worktable-stage" id="worktable-stage" data-tool="draw">
+        <svg id="worktable-canvas" class="drawing-canvas" xmlns="http://www.w3.org/2000/svg" data-aria-label="worktable" role="img">
+          <defs><clipPath id="worktable-clip"></clipPath></defs>
+          <g id="worktable-layer"></g>
+          <g id="worktable-grout-layer" clip-path="url(#worktable-clip)" pointer-events="none" aria-hidden="true"></g>
+          <g id="worktable-piece-layer"></g>
+          <g id="worktable-selection-layer" pointer-events="none" aria-hidden="true"></g>
+        </svg>
+      </div>
+    </aside>
 
     <aside class="library sidebar" id="tile-library" data-aria-label="sidePanels">
       <div class="dock-tabs" role="group" data-aria-label="sidePanels">

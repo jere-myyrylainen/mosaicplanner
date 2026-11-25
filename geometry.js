@@ -1288,13 +1288,14 @@
       }
     }
 
-    nearestSplitStart(point, limit) {
+    nearestSplitStart(point, limit, acceptsPiece) {
       const bounds = { minX: point.x, maxX: point.x, minY: point.y, maxY: point.y };
       let nearest;
       let hoveredCurve;
       let best = limit;
       for (const geometry of this.nearby(bounds, limit)) {
         const { piece, points, radius, curved, minX, maxX, minY, maxY } = geometry;
+        if (acceptsPiece && !acceptsPiece(piece)) continue;
         if (point.x < minX - limit || point.x > maxX + limit ||
             point.y < minY - limit || point.y > maxY + limit) continue;
         if (radius || curved) {
@@ -1323,12 +1324,13 @@
       return nearest && !nearest.curve ? positionSplitEdge(nearest, nearest.along, limit) : nearest || hoveredCurve;
     }
 
-    firstSplitBoundary(start, end, limit) {
+    firstSplitBoundary(start, end, limit, acceptsPiece) {
       const dx = end.x - start.x;
       const dy = end.y - start.y;
       let first;
       let best = 1;
       for (const piece of this.piecesAlong(start, end)) {
+        if (acceptsPiece && !acceptsPiece(piece)) continue;
         const geometry = this.geometry(piece);
         const { points, radius, curved } = geometry;
         const range = radius ? circleLineRange(geometry, start, end) : polygonLineRange(points, start, end);
@@ -1347,14 +1349,14 @@
       return first;
     }
 
-    splitLine(start, end, startTarget, limit = 0) {
+    splitLine(start, end, startTarget, limit = 0, acceptsPiece) {
       if (Math.hypot(end.x - start.x, end.y - start.y) <= EPSILON) return { start, end };
       const intoEdge = (edge, point) => (point.y - edge.first.y) * edge.tx - (point.x - edge.first.x) * edge.ty;
       const anchored = startTarget && startTarget.point && (startTarget.curve ?
         (end.x - startTarget.point.x) * (startTarget.curve.piece.x - startTarget.point.x) +
         (end.y - startTarget.point.y) * (startTarget.curve.piece.y - startTarget.point.y) > EPSILON :
         intoEdge(startTarget, end) > EPSILON);
-      const edge = anchored ? startTarget : this.firstSplitBoundary(start, end, limit);
+      const edge = anchored ? startTarget : this.firstSplitBoundary(start, end, limit, acceptsPiece);
       if (!edge) return { start, end };
       if (edge.curve) return curveSplitLine(start, end, edge, limit, anchored);
 

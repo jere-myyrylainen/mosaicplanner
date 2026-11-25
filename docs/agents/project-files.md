@@ -9,6 +9,7 @@
 - Save diamonds, ovals, and leaves with the `diamond`, `oval`, and `leaf` shape values. Their width and height are the full dimensions in millimetres before rotation.
 - A split piece keeps its original `tileId` and stores an optional convex `outline` in local millimetres before rotation. Validate the ordered vertices and use them for fit and overlap checks. Pieces without an outline use the library shape and dimensions.
 - The optional numeric `worktable` field records the square table's side length in millimetres. Both surfaces use the same piece list and coordinate space. Derive the table bounds from the board dimensions and validate that each piece fits on its surface. Files without the field open with only the mosaic board.
+- Worktable panel visibility is editor state. Hiding the panel leaves the worktable and its pieces in the project. Opening a saved project with a worktable shows the panel.
 - Use immutable snapshots for history and persistence. Keep zoom, active tools, selected pieces, and library filters as editor state. The language and library order are separate browser preferences.
 - Keep copied pieces and the paste preview in the editor session. Opening or starting a project clears the clipboard. Only committed copies enter the project snapshot and the undo history.
 - Collect the project name and board geometry before creating a project. Keep the current tile library and commit the new snapshot in one action.
