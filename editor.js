@@ -1511,27 +1511,26 @@
     commit({ ...project, pieces: project.pieces.concat(copies) });
   }
 
-  function renderSplitMeasurement(layer, { edge, start, end, locked }) {
+  function renderSplitMeasurement(layer, { edge, locked }) {
     if (!edge) return;
-    const lengths = Model.splitEdgeLengths(edge, project.seam, start, end);
-    if (!lengths) return;
     const scale = rulerView.unitsPerPixel;
-    const { first, along, length, tx, ty, point } = edge;
+    const { first, along, length, tx, ty, point, fraction } = edge;
     const at = (distance, offset) => [
       first.x + distance * tx + offset * ty, first.y + distance * ty - offset * tx
     ];
     const pathPoint = (command, distance, offset) => command + at(distance, offset).join(' ');
     const baseline = 12 * scale;
-    const { before, after } = lengths;
-    const boundary = length - after;
-    const segments = pathPoint('M', 0, baseline) + pathPoint('L', before, baseline) +
-      pathPoint('M', boundary, baseline) + pathPoint('L', length, baseline);
-    const ticks = [...new Set([0, before, boundary, length])].map(distance =>
+    const after = length - along;
+    const segment = pathPoint('M', 0, baseline) + pathPoint('L', length, baseline);
+    const ticks = [0, along, length].map(distance =>
       pathPoint('M', distance, 2 * scale) + pathPoint('L', distance, baseline + 3 * scale));
-    layer.append(svgElement('path', { d: segments + ticks.join(''), class: 'split-dimension-line' }));
+    layer.append(svgElement('path', { d: segment + ticks.join(''), class: 'split-dimension-line' }));
+    const marks = Model.SPLIT_FRACTIONS.filter(mark => mark !== fraction).map(mark =>
+      pathPoint('M', length * mark, baseline - 3 * scale) + pathPoint('L', length * mark, baseline + 3 * scale));
+    layer.append(svgElement('path', { d: marks.join(''), class: 'split-snap-marks' }));
 
     const labels = [
-      { length: before, distance: Math.min(before / 2, along - 35 * scale) },
+      { length: along, distance: Math.min(along / 2, along - 35 * scale) },
       { length: after, distance: Math.max(length - after / 2, along + 35 * scale) }
     ];
     for (const label of labels) {
@@ -1544,11 +1543,12 @@
       layer.append(text);
     }
     layer.append(svgElement('circle', {
-      cx: point.x, cy: point.y, r: 2.5 * scale, class: 'split-anchor'
+      cx: point.x, cy: point.y, r: (fraction ? 3.7 : 2.5) * scale,
+      class: fraction ? 'split-anchor snapped-split-anchor' : 'split-anchor'
     }));
     if (locked) {
-      const size = Math.min(8 * scale, Math.max(before, after) / 2);
-      const side = before > after ? -1 : 1;
+      const size = Math.min(8 * scale, Math.max(along, after) / 2);
+      const side = along > after ? -1 : 1;
       const d = pathPoint('M', along + size * side, 0) + pathPoint('L', along + size * side, -size) +
         pathPoint('L', along, -size);
       layer.append(svgElement('path', { d, class: 'split-right-angle' }));
@@ -1563,14 +1563,14 @@
 
   function previewSplit(current, pointer) {
     current.end = pointer;
-    const line = placementIndex.splitLine(current.start, pointer, current.edge);
+    const line = placementIndex.splitLine(current.start, pointer, current.edge, snapDistance);
     const { start, end } = line;
     let target;
     let fragments;
     let error = 'splitAcrossTile';
     for (const piece of placementIndex.piecesAlong(start, end)) {
       const tile = placementIndex.tileTypes.get(piece.tileId);
-      const cut = Model.splitPiece(tile, piece, start, end, project.seam);
+      const cut = Model.splitPiece(tile, piece, start, end);
       if (!cut) continue;
       if (target) {
         fragments = undefined;

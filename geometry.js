@@ -17,6 +17,7 @@
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
   const SPLIT_SNAP_SLOPE = Math.tan(10 * Math.PI / 180);
+  const SPLIT_FRACTIONS = Object.freeze([1 / 4, 1 / 2, 3 / 4]);
   const CURVE_SEGMENTS = 64;
   const MAX_OUTLINE_VERTICES = 128;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
@@ -539,16 +540,17 @@
     };
   }
 
-  function splitEdgeLengths(edge, gap, start, end) {
-    let removed = gap / 2;
-    if (start && end) {
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const across = Math.abs(dy * edge.tx - dx * edge.ty);
-      if (across <= EPSILON) return;
-      removed *= Math.hypot(dx, dy) / across;
-    }
-    return { before: Math.max(0, edge.along - removed), after: Math.max(0, edge.length - edge.along - removed) };
+  function positionSplitEdge(edge, along, limit) {
+    const { first, length, tx, ty } = edge;
+    const fraction = SPLIT_FRACTIONS[Math.round(4 * along / length) - 1];
+    const mark = fraction * length;
+    // Keep some free positions between nearby marks even when the edge is small on screen.
+    const snapped = fraction !== undefined && Math.abs(mark - along) <= Math.min(limit, length / 16);
+    const distance = snapped ? mark : along;
+    return {
+      ...edge, along: distance, fraction: snapped ? fraction : undefined,
+      point: { x: first.x + distance * tx, y: first.y + distance * ty }
+    };
   }
 
   function clipOutline(points, normalX, normalY, offset) {
@@ -577,7 +579,7 @@
     return doubledArea / 2;
   }
 
-  function splitPiece(tile, piece, start, end, gap) {
+  function splitPiece(tile, piece, start, end) {
     const radians = piece.angle * Math.PI / 180;
     const cos = Math.cos(radians);
     const sin = Math.sin(radians);
@@ -604,13 +606,10 @@
     const offset = first.x * normalX + first.y * normalY;
     const { min, max } = projectionBounds(points, normalX, normalY);
     if (offset <= min + EPSILON || offset >= max - EPSILON) return;
-    const halfGap = gap / 2;
-    if (offset <= min + halfGap + EPSILON || offset >= max - halfGap - EPSILON) return {};
-
-    // Clip back from each side of the cut to leave room for grout inside the original tile.
+    // Both fragments use the cut line as their shared boundary.
     const fragments = [];
     for (const side of [1, -1]) {
-      const clipped = clipOutline(points, side * normalX, side * normalY, side * offset + halfGap);
+      const clipped = clipOutline(points, side * normalX, side * normalY, side * offset);
       if (clipped.length < 3) return {};
       const x = clipped.reduce((sum, point) => sum + point.x, 0) / clipped.length;
       const y = clipped.reduce((sum, point) => sum + point.y, 0) / clipped.length;
@@ -1155,7 +1154,7 @@
           best = distance;
         }
       }
-      return nearest;
+      return nearest && positionSplitEdge(nearest, nearest.along, limit);
     }
 
     firstSplitEdge(start, end) {
@@ -1177,25 +1176,36 @@
       return first;
     }
 
-    splitLine(start, end, startEdge) {
-      const intoEdge = edge => (end.y - edge.point.y) * edge.tx - (end.x - edge.point.x) * edge.ty;
-      const anchored = startEdge && intoEdge(startEdge) > EPSILON;
+    splitLine(start, end, startEdge, limit = 0) {
+      const intoEdge = (edge, point) => (point.y - edge.first.y) * edge.tx - (point.x - edge.first.x) * edge.ty;
+      const anchored = startEdge && intoEdge(startEdge, end) > EPSILON;
       const edge = anchored ? startEdge : this.firstSplitEdge(start, end);
       if (!edge) return { start, end };
 
       const { point, first, length, tx, ty } = edge;
-      const depth = intoEdge(edge);
-      const drift = (end.x - point.x) * tx + (end.y - point.y) * ty;
+      const depth = intoEdge(edge, end);
+      const from = Math.min(0, intoEdge(edge, start));
+      const alongEdge = (p, q) => (p.x - q.x) * tx + (p.y - q.y) * ty;
+      let drift = Math.abs(alongEdge(end, point));
+      if (anchored) drift = Math.min(drift, Math.abs(alongEdge(end, start)));
       const along = anchored ? edge.along : (start.x - first.x) * tx + (start.y - first.y) * ty;
-      if (along <= EPSILON || along >= length - EPSILON || Math.abs(drift) > depth * SPLIT_SNAP_SLOPE) {
-        return { start: anchored ? point : start, end, edge };
+      if (along > EPSILON && along < length - EPSILON && drift <= depth * SPLIT_SNAP_SLOPE) {
+        const aligned = positionSplitEdge(edge, along, limit);
+        const pivot = aligned.point;
+        return {
+          start: { x: pivot.x - from * ty, y: pivot.y + from * tx },
+          end: { x: pivot.x - depth * ty, y: pivot.y + depth * tx },
+          edge: aligned, locked: true
+        };
       }
-      const pivot = { x: first.x + along * tx, y: first.y + along * ty };
-      const from = Math.min(0, (start.y - point.y) * tx - (start.x - point.x) * ty);
+      if (anchored) return { start: point, end, edge };
+      const aligned = positionSplitEdge(edge, edge.along, limit);
+      if (!aligned.fraction || depth <= EPSILON) return { start, end, edge };
+      const pivot = aligned.point;
+      const extension = from / depth;
       return {
-        start: { x: pivot.x - from * ty, y: pivot.y + from * tx },
-        end: { x: pivot.x - depth * ty, y: pivot.y + depth * tx },
-        edge: { ...edge, point: pivot, along }, locked: true
+        start: { x: pivot.x + extension * (end.x - pivot.x), y: pivot.y + extension * (end.y - pivot.y) },
+        end, edge: aligned
       };
     }
 
@@ -1539,7 +1549,7 @@
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
     fitsBoard, gridOrigin, guideFromDrag, isOnWorktable, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, splitEdgeLengths, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    referenceWidthLimit, sampleOutline, sampleSegment, SPLIT_FRACTIONS, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions, worktableBounds
   };
 

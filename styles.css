@@ -177,7 +177,9 @@ select {
 .split-line { stroke-dasharray: 5 4; }
 .split-line.invalid-split { stroke: #a34032; }
 .split-dimension-line, .split-right-angle { fill: none; stroke: #193e9a; stroke-width: 1.15; vector-effect: non-scaling-stroke; }
+.split-snap-marks { fill: none; stroke: #193e9a; stroke-width: 1.15; opacity: .65; vector-effect: non-scaling-stroke; }
 .split-anchor { fill: #193e9a; stroke: var(--paper); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+.snapped-split-anchor { stroke-width: 1.7; }
 .split-dimension-label {
   fill: #193e9a; stroke: var(--paper); stroke-width: 3; stroke-linejoin: round; paint-order: stroke;
   vector-effect: non-scaling-stroke; font-weight: 650; font-variant-numeric: tabular-nums;
