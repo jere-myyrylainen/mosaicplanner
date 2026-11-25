@@ -17,7 +17,7 @@
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
   const SPLIT_SNAP_SLOPE = Math.tan(10 * Math.PI / 180);
-  const SPLIT_FRACTIONS = Object.freeze([1 / 4, 1 / 2, 3 / 4]);
+  const SPLIT_FRACTIONS = Object.freeze([0, 1 / 4, 1 / 2, 3 / 4, 1]);
   const CURVE_SEGMENTS = 64;
   const MAX_OUTLINE_VERTICES = 128;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
@@ -535,30 +535,77 @@
     if (length <= EPSILON) return;
     const fraction = segmentFraction(origin, first, dx, dy);
     return {
-      first, length, along: fraction * length, tx: dx / length, ty: dy / length,
+      points, first, last, length, along: fraction * length, tx: dx / length, ty: dy / length,
       point: { x: first.x + dx * fraction, y: first.y + dy * fraction }
     };
   }
 
   function positionSplitEdge(edge, along, limit) {
-    const { first, length, tx, ty } = edge;
-    const fraction = SPLIT_FRACTIONS[Math.round(4 * along / length) - 1];
+    const { first, last, length, tx, ty } = edge;
+    const fraction = SPLIT_FRACTIONS[Math.round(4 * along / length)];
     const mark = fraction * length;
     // Keep some free positions between nearby marks even when the edge is small on screen.
     const snapped = fraction !== undefined && Math.abs(mark - along) <= Math.min(limit, length / 16);
     const distance = snapped ? mark : along;
+    const point = distance === 0 ? first : distance === length ? last :
+      { x: first.x + distance * tx, y: first.y + distance * ty };
     return {
-      ...edge, along: distance, fraction: snapped ? fraction : undefined,
-      point: { x: first.x + distance * tx, y: first.y + distance * ty }
+      ...edge, along: distance, fraction: snapped ? fraction : undefined, point
+    };
+  }
+
+  function crossesSplitInterior(points, start, end) {
+    const middle = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    return points.every((first, i) => {
+      const last = points[(i + 1) % points.length];
+      return sideOfEdge(first, last, middle) > EPSILON * Math.hypot(last.x - first.x, last.y - first.y);
+    });
+  }
+
+  function nearestSplitEnd({ points, point: start }, end, limit) {
+    let nearest;
+    let best = limit;
+    for (let i = 0; i < points.length; i++) {
+      const edge = splitEdge(points, i, end);
+      if (!edge) continue;
+      const anchor = positionSplitEdge(edge, edge.along, limit);
+      if (anchor.fraction === undefined) continue;
+      const { point } = anchor;
+      const distance = Math.hypot(end.x - point.x, end.y - point.y);
+      const chord = Math.hypot(start.x - point.x, start.y - point.y);
+      if (distance > Math.min(best, chord / 4) || (nearest && distance === best) ||
+          !crossesSplitInterior(points, start, point)) continue;
+      nearest = point;
+      best = distance;
+    }
+    return nearest;
+  }
+
+  function perpendicularSplitLine(edge, depth, from, limit) {
+    const { points, point, tx, ty } = edge;
+    const end = { x: point.x - depth * ty, y: point.y + depth * tx };
+    const range = polygonLineRange(points, point, end);
+    if (!range || range.exit <= 0) return;
+    const chord = range.exit * depth;
+    const exit = { x: point.x - chord * ty, y: point.y + chord * tx };
+    if (!crossesSplitInterior(points, point, exit)) return;
+    const endAnchor = Math.abs(depth - chord) <= Math.min(limit, chord / 4) ? exit : undefined;
+    return {
+      start: { x: point.x - from * ty, y: point.y + from * tx },
+      end: endAnchor || end, edge, endAnchor, locked: true
     };
   }
 
   function clipOutline(points, normalX, normalY, offset) {
+    function distance(point) {
+      const value = point.x * normalX + point.y * normalY - offset;
+      return Math.abs(value) <= EPSILON ? 0 : value;
+    }
     const result = [];
     let previous = points[points.length - 1];
-    let from = previous.x * normalX + previous.y * normalY - offset;
+    let from = distance(previous);
     for (const point of points) {
-      const to = point.x * normalX + point.y * normalY - offset;
+      const to = distance(point);
       if ((from < 0 && to > 0) || (from > 0 && to < 0)) {
         const fraction = from / (from - to);
         result.push({
@@ -1177,6 +1224,7 @@
     }
 
     splitLine(start, end, startEdge, limit = 0) {
+      if (Math.hypot(end.x - start.x, end.y - start.y) <= EPSILON) return { start, end };
       const intoEdge = (edge, point) => (point.y - edge.first.y) * edge.tx - (point.x - edge.first.x) * edge.ty;
       const anchored = startEdge && intoEdge(startEdge, end) > EPSILON;
       const edge = anchored ? startEdge : this.firstSplitEdge(start, end);
@@ -1188,24 +1236,32 @@
       const alongEdge = (p, q) => (p.x - q.x) * tx + (p.y - q.y) * ty;
       let drift = Math.abs(alongEdge(end, point));
       if (anchored) drift = Math.min(drift, Math.abs(alongEdge(end, start)));
-      const along = anchored ? edge.along : (start.x - first.x) * tx + (start.y - first.y) * ty;
-      if (along > EPSILON && along < length - EPSILON && drift <= depth * SPLIT_SNAP_SLOPE) {
+      const projected = alongEdge(start, first);
+      const along = anchored ? edge.along : projected;
+      if (along >= 0 && along <= length && drift <= depth * SPLIT_SNAP_SLOPE) {
         const aligned = positionSplitEdge(edge, along, limit);
-        const pivot = aligned.point;
-        return {
-          start: { x: pivot.x - from * ty, y: pivot.y + from * tx },
-          end: { x: pivot.x - depth * ty, y: pivot.y + depth * tx },
-          edge: aligned, locked: true
-        };
+        const perpendicular = perpendicularSplitLine(aligned, depth, from, limit);
+        if (perpendicular) return perpendicular;
+
+        // A corner snap can turn a perpendicular cut into a line along the tile's side.
+        if (projected > EPSILON && projected < length - EPSILON && projected !== aligned.along) {
+          const freeStart = positionSplitEdge(edge, projected, 0);
+          const inside = perpendicularSplitLine(freeStart, depth, from, limit);
+          if (inside) return inside;
+        }
       }
-      if (anchored) return { start: point, end, edge };
-      const aligned = positionSplitEdge(edge, edge.along, limit);
-      if (!aligned.fraction || depth <= EPSILON) return { start, end, edge };
+      const aligned = anchored ? edge : positionSplitEdge(edge, edge.along, limit);
+      const endAnchor = nearestSplitEnd(aligned, end, limit);
+      const finish = endAnchor || end;
+      if (anchored) return { start: point, end: finish, edge, endAnchor };
+      if (aligned.fraction === undefined && !endAnchor) return { start, end, edge };
+      const finishDepth = intoEdge(aligned, finish);
+      if (finishDepth <= EPSILON) return { start, end, edge };
       const pivot = aligned.point;
-      const extension = from / depth;
+      const extension = from / finishDepth;
       return {
-        start: { x: pivot.x + extension * (end.x - pivot.x), y: pivot.y + extension * (end.y - pivot.y) },
-        end, edge: aligned
+        start: { x: pivot.x + extension * (finish.x - pivot.x), y: pivot.y + extension * (finish.y - pivot.y) },
+        end: finish, edge: aligned, endAnchor
       };
     }
 

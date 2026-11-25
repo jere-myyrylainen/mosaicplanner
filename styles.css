@@ -168,18 +168,21 @@ select {
 .stage[data-tool="guideLine"]:not(.pan-ready):not(.is-panning) .guide-anchors { display: block; }
 .active-guide-anchor { fill: var(--paper); stroke: #345794; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .piece-face { stroke: #22342e27; stroke-width: .7; vector-effect: non-scaling-stroke; }
+.cut-piece-face { stroke: #75817a; stroke-width: 1.15; }
 .erased-piece { display: none; }
 .moving-piece { opacity: .3; }
 .selection-outline { fill: none; stroke: #193e9a; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .invalid-selection .selection-outline { stroke: #a34032; }
-.split-outline, .split-line { stroke: #193e9a; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
-.split-outline { fill: #193e9a19; }
-.split-line { stroke-dasharray: 5 4; }
-.split-line.invalid-split { stroke: #a34032; }
+.split-outline { fill: #193e9a19; stroke: #193e9a; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.split-line, .split-line-halo { stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.split-line-halo { stroke: #fff; stroke-width: 6; }
+.split-line { stroke: #15377d; stroke-width: 3; }
+.split-line.invalid-split { stroke: #a34032; stroke-dasharray: 5 5; }
 .split-dimension-line, .split-right-angle { fill: none; stroke: #193e9a; stroke-width: 1.15; vector-effect: non-scaling-stroke; }
 .split-snap-marks { fill: none; stroke: #193e9a; stroke-width: 1.15; opacity: .65; vector-effect: non-scaling-stroke; }
 .split-anchor { fill: #193e9a; stroke: var(--paper); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
 .snapped-split-anchor { stroke-width: 1.7; }
+.split-end-anchor { fill: #fff; stroke: #15377d; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
 .split-dimension-label {
   fill: #193e9a; stroke: var(--paper); stroke-width: 3; stroke-linejoin: round; paint-order: stroke;
   vector-effect: non-scaling-stroke; font-weight: 650; font-variant-numeric: tabular-nums;

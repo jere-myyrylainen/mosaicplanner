@@ -78,4 +78,40 @@ assert.equal(angledQuarter.locked, undefined);
 assert.equal(angledQuarter.edge.fraction, .25);
 assert.equal(Model.splitPiece(tile, original, angledQuarter.start, angledQuarter.end).fragments.length, 2);
 
+const cornerStart = world(-9.65, -6.35);
+const cornerEdge = index.nearestSplitEdge(cornerStart, 1);
+assert.equal(cornerEdge.fraction, 0);
+const cornerCut = index.splitLine(cornerStart, world(9.7, 5.6), cornerEdge, 1);
+assert.equal(cornerCut.locked, undefined);
+close(cornerCut.start.x, world(-10, -6).x);
+close(cornerCut.start.y, world(-10, -6).y);
+close(cornerCut.endAnchor.x, world(10, 6).x);
+close(cornerCut.endAnchor.y, world(10, 6).y);
+const diagonalParts = Model.splitPiece(tile, original, cornerCut.start, cornerCut.end).fragments;
+assert.ok(diagonalParts.every(part => part.outline.length === 3));
+close(area(diagonalParts[0].outline) + area(diagonalParts[1].outline), tile.width * tile.height);
+assert.equal(Model.readProject({ ...project, pieces: diagonalParts.map((part, i) => ({ ...part, id: String(i) })) }).pieces.length, 2);
+
+for (const x of [-5, 0, 5]) {
+  const cut = index.splitLine(cornerStart, world(x + .3, 5.6), cornerEdge, 1);
+  assert.equal(cut.locked, undefined);
+  close(cut.endAnchor.x, world(x, 6).x);
+  close(cut.endAnchor.y, world(x, 6).y);
+}
+
+const rightAngleStart = world(-3.8, -6.3);
+const rightAngleEdge = index.nearestSplitEdge(rightAngleStart, 1.1);
+assert.equal(rightAngleEdge.fraction, undefined);
+const conflict = index.splitLine(rightAngleStart, world(-4.8, 5.5), rightAngleEdge, 1.1);
+assert.ok(conflict.locked);
+close(conflict.endAnchor.x, world(-3.8, 6).x);
+close(conflict.endAnchor.y, world(-3.8, 6).y);
+
+const nearCorner = index.splitLine(cornerStart, world(-9.7, 5.5), cornerEdge, 1);
+assert.ok(nearCorner.locked);
+assert.equal(nearCorner.edge.fraction, undefined);
+close(nearCorner.endAnchor.x, world(-9.65, 6).x);
+close(nearCorner.endAnchor.y, world(-9.65, 6).y);
+assert.equal(index.splitLine(cornerStart, cornerStart, cornerEdge, 1).endAnchor, undefined);
+
 console.log('Tile splitting tests passed.');

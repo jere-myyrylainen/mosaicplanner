@@ -377,7 +377,8 @@
     for (const piece of project.pieces) {
       (Model.isOnWorktable(worktable, piece) ? tablePieces : mosaicPieces).push(piece);
       const tile = tileTypes.get(piece.tileId);
-      const element = pieceShape(piece, tile, { class: 'piece-face', fill: tile.color, 'data-piece': piece.id });
+      const classes = piece.outline ? 'piece-face cut-piece-face' : 'piece-face';
+      const element = pieceShape(piece, tile, { class: classes, fill: tile.color, 'data-piece': piece.id });
       pieceElements.set(piece.id, element);
       fragment.append(element);
     }
@@ -1525,7 +1526,7 @@
     const ticks = [0, along, length].map(distance =>
       pathPoint('M', distance, 2 * scale) + pathPoint('L', distance, baseline + 3 * scale));
     layer.append(svgElement('path', { d: segment + ticks.join(''), class: 'split-dimension-line' }));
-    const marks = Model.SPLIT_FRACTIONS.filter(mark => mark !== fraction).map(mark =>
+    const marks = Model.SPLIT_FRACTIONS.filter(mark => mark > 0 && mark < 1 && mark !== fraction).map(mark =>
       pathPoint('M', length * mark, baseline - 3 * scale) + pathPoint('L', length * mark, baseline + 3 * scale));
     layer.append(svgElement('path', { d: marks.join(''), class: 'split-snap-marks' }));
 
@@ -1542,9 +1543,10 @@
       text.textContent = I18n.number(label.length) + ' mm';
       layer.append(text);
     }
+    const snapped = fraction !== undefined;
     layer.append(svgElement('circle', {
-      cx: point.x, cy: point.y, r: (fraction ? 3.7 : 2.5) * scale,
-      class: fraction ? 'split-anchor snapped-split-anchor' : 'split-anchor'
+      cx: point.x, cy: point.y, r: (snapped ? 3.7 : 2.5) * scale,
+      class: snapped ? 'split-anchor snapped-split-anchor' : 'split-anchor'
     }));
     if (locked) {
       const size = Math.min(8 * scale, Math.max(along, after) / 2);
@@ -1564,7 +1566,7 @@
   function previewSplit(current, pointer) {
     current.end = pointer;
     const line = placementIndex.splitLine(current.start, pointer, current.edge, snapDistance);
-    const { start, end } = line;
+    const { start, end, endAnchor } = line;
     let target;
     let fragments;
     let error = 'splitAcrossTile';
@@ -1594,11 +1596,15 @@
       const tile = placementIndex.tileTypes.get(target.tileId);
       for (const piece of fragments) preview.append(pieceShape(piece, tile, { class: 'split-outline' }));
     }
-    preview.append(svgElement('line', {
-      x1: start.x, y1: start.y, x2: end.x, y2: end.y,
-      class: fragments ? 'split-line' : 'split-line invalid-split'
-    }));
+    const cutLine = { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
+    preview.append(
+      svgElement('line', { ...cutLine, class: 'split-line-halo' }),
+      svgElement('line', { ...cutLine, class: fragments ? 'split-line' : 'split-line invalid-split' })
+    );
     renderSplitMeasurement(preview, line);
+    if (endAnchor) preview.append(svgElement('circle', {
+      cx: endAnchor.x, cy: endAnchor.y, r: 4 * rulerView.unitsPerPixel, class: 'split-end-anchor'
+    }));
     layers.preview.replaceChildren(preview);
   }
 
