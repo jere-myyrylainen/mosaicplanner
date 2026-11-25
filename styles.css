@@ -139,15 +139,15 @@ h1 { margin: 0; font-size: 1.07rem; font-weight: 750; letter-spacing: -.035em; }
 .library { grid-area: dock; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
 .worktable-panel {
   grid-area: worktable; border-left: 1px solid var(--line); min-height: 0;
-  padding: .45rem .55rem; overflow: auto;
+  display: flex; flex-direction: column; padding: .45rem .55rem; overflow: auto;
 }
-.worktable-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .18rem .35rem; margin-bottom: .4rem; }
+.worktable-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .18rem .35rem; margin-bottom: .4rem; flex: none; }
 .worktable-heading h2 { font-size: .875rem; }
 .worktable-zoom { gap: .1rem; }
 .worktable-zoom .icon-button { width: 24px; height: 30px; }
 .worktable-zoom .icon { width: .95rem; height: .95rem; }
 .worktable-zoom output { font-size: .76rem; min-width: 2.45rem; text-align: center; font-variant-numeric: tabular-nums; }
-.worktable-stage { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; }
+.worktable-stage { flex: 1; min-height: 9rem; border: 1px solid var(--line); border-radius: 8px; }
 .dock-tabs {
   display: flex; align-items: center; gap: .25rem; padding: .4rem .55rem;
   border-bottom: 1px solid var(--line);
@@ -453,7 +453,7 @@ dialog form > p { margin: 0; color: var(--muted); }
   .workspace { grid-template-rows: auto minmax(340px, 57vh); }
   .worktable-open .workspace { grid-template-rows: auto clamp(230px, 38vh, 350px); }
   .worktable-panel { border-left: 0; border-top: 1px solid var(--line); }
-  .worktable-stage { aspect-ratio: auto; height: clamp(144px, 27vh, 210px); }
+  .worktable-stage { flex: none; height: clamp(144px, 27vh, 210px); }
   .worktable-toggle span { display: none; }
   .library { border-left: 0; border-top: 1px solid var(--line); }
   .library-expanded .tile-list { max-height: 55vh; overflow: auto; }

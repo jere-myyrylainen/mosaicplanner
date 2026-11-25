@@ -30,6 +30,16 @@ assert.throws(() => Model.readProject({ ...saved, worktable: -1 }), /invalidProj
 assert.throws(() => Model.readProject({ ...saved, worktable: undefined }), /invalidPlacements/);
 assert.equal(Model.readProject({ ...project, worktable: undefined }).worktable, undefined);
 
+const tall = { ...project, worktableHeight: 160 };
+const tallPiece = piece('tall', tablePiece.x, 65);
+assert.ok(new Model.PlacementIndex(tall).accepts(Model.pieceGeometry(tile, tallPiece)));
+const restoredTall = Model.readProject({ ...tall, pieces: [tallPiece] });
+assert.equal(restoredTall.worktableHeight, 160);
+assert.deepEqual(restoredTall.pieces, [tallPiece]);
+assert.throws(() => Model.readProject({ ...project, pieces: [tallPiece] }), /invalidPlacements/);
+assert.throws(() => Model.readProject({ ...tall, worktable: undefined }), /invalidProject/);
+assert.throws(() => Model.readProject({ ...tall, worktableHeight: 10001 }), /invalidProject/);
+
 const wide = { ...project, board: { ...board, width: 10000 } };
 const wideTable = Model.worktableBounds(wide.board, wide.worktable);
 const widePiece = piece('wide', wideTable.maxX - 5);

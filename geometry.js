@@ -90,11 +90,11 @@
     ) <= radius + EPSILON;
   }
 
-  function worktableBounds(board, size) {
-    if (size === undefined) return;
+  function worktableBounds(board, width, height = width) {
+    if (width === undefined) return;
     const gap = Math.max(12, Math.min(board.width, board.height) / 10);
     const minX = board.width / 2 + gap;
-    return { minX, maxX: minX + size, minY: -size / 2, maxY: size / 2 };
+    return { minX, maxX: minX + width, minY: -height / 2, maxY: height / 2 };
   }
 
   function isOnWorktable(table, point) {
@@ -1126,7 +1126,7 @@
   class PlacementIndex {
     constructor(project, excludedIds) {
       this.board = project.board;
-      this.worktable = worktableBounds(project.board, project.worktable);
+      this.worktable = worktableBounds(project.board, project.worktable, project.worktableHeight);
       this.gap = project.seam;
       this.tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
       this.cells = new Map();
@@ -1655,12 +1655,13 @@
   function readProject(value) {
     const error = 'invalidProject';
     if (!value || value.version !== 1 || !validText(value.name, 80)) throw new ValidationError(error);
-    const { board, grid, guides = [], tiles, pieces, worktable, seam, seamColor = DEFAULT_SEAM_COLOR } = value;
+    const { board, grid, guides = [], tiles, pieces, worktable, worktableHeight, seam, seamColor = DEFAULT_SEAM_COLOR } = value;
     if (!board || !boardShapes.includes(board.shape) ||
         !validNumber(board.width, 1, 10000) || !validNumber(board.height, 1, 10000) ||
         !validNumber(board.radius, 0, Math.min(board.width, board.height) / 2) ||
         (board.shape === 'circle' && board.width !== board.height) ||
         (worktable !== undefined && !validNumber(worktable, 1, 10000)) ||
+        (worktableHeight !== undefined && (worktable === undefined || !validNumber(worktableHeight, 1, 10000))) ||
         !validNumber(seam, 0, 100) || !validColor(seamColor) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
         !validNumber(grid.weight, .1, 10) ||
@@ -1701,6 +1702,7 @@
     restored.name = value.name.trim();
     restored.board = { shape: board.shape, width: board.width, height: board.height, radius: board.radius };
     if (worktable !== undefined) restored.worktable = worktable;
+    if (worktableHeight !== undefined) restored.worktableHeight = worktableHeight;
     const { offsetX = 0, offsetY = 0 } = grid;
     restored.grid = {
       visible: grid.visible, size: grid.size, weight: grid.weight, offsetX, offsetY, snap: grid.snap,

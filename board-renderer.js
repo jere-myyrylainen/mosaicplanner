@@ -73,7 +73,7 @@
     pattern.setAttribute('y', y);
   }
 
-  function renderBoard({ board, grid, guides, worktable }, layers) {
+  function renderBoard({ board, grid, guides }, layers) {
     const pattern = document.getElementById('grid-pattern');
     const lines = document.getElementById('grid-lines');
     const clip = document.getElementById('board-clip');
@@ -90,22 +90,22 @@
     layers.grid.textContent = '';
     if (grid.visible) layers.grid.appendChild(boardShape(board, { fill: 'url(#grid-pattern)' }));
     layers.grid.appendChild(boardShape(board, { class: 'board-outline', fill: 'none' }));
-    if (layers.worktable) {
-      layers.worktable.textContent = '';
-      layers.worktableClip.textContent = '';
-      const bounds = window.MosaicGeometry.worktableBounds(board, worktable);
-      if (bounds) {
-        const rect = { x: bounds.minX, y: bounds.minY, width: worktable, height: worktable };
-        layers.worktable.appendChild(svgElement('rect', { ...rect, class: 'board-shadow board-outline', fill: '#e2ebe2' }));
-        layers.worktableClip.appendChild(svgElement('rect', rect));
-      }
-    }
     layers.guides.textContent = '';
     if (grid.guidesVisible) {
       const fragment = document.createDocumentFragment();
       for (const guide of guides) fragment.appendChild(guideShape(guide));
       layers.guides.appendChild(fragment);
     }
+  }
+
+  function renderWorktable(bounds, surface, clip) {
+    surface.textContent = '';
+    clip.textContent = '';
+    if (!bounds) return;
+    const { minX, maxX, minY, maxY } = bounds;
+    const rect = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    surface.appendChild(svgElement('rect', { ...rect, class: 'board-shadow board-outline', fill: '#e2ebe2' }));
+    clip.appendChild(svgElement('rect', rect));
   }
 
   function renderBoardRulers(layer, board, anchors, unitsPerPixel, format) {
@@ -176,5 +176,5 @@
     element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
   }
 
-  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintGridPosition, paintReference };
+  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderWorktable, renderBoardRulers, paintGridPosition, paintReference };
 }());

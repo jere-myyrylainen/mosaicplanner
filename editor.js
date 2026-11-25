@@ -4,7 +4,7 @@
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
   const I18n = window.MosaicI18n;
-  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderBoardRulers, paintGridPosition, paintReference } = window.MosaicBoard;
+  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderWorktable, renderBoardRulers, paintGridPosition, paintReference } = window.MosaicBoard;
   const t = I18n.text;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
@@ -42,7 +42,7 @@
   const tableView = {
     canvas: byId('worktable-canvas'), stage: byId('worktable-stage'),
     pieces: byId('worktable-piece-layer'), selection: byId('worktable-selection-layer'),
-    zoom: 1, center: { x: 0, y: 0 }, unitsPerPixel: 1, zoomId: 'worktable-zoom'
+    zoom: 1, fitZoom: 1, fitted: false, center: { x: 0, y: 0 }, unitsPerPixel: 1, zoomId: 'worktable-zoom'
   };
   const views = [boardView, tableView];
   const worktablePanel = byId('worktable-panel');
@@ -138,7 +138,29 @@
     past.push(project);
     if (past.length > 40) past.shift();
     future.length = 0;
-    useProject(next);
+    useProject(retainWorktableHeight(next));
+  }
+
+  function retainWorktableHeight(next) {
+    // The panel can add temporary space. Save only the height needed by the tiles.
+    const table = placementIndex?.worktable;
+    if (!table || next.worktable !== project.worktable || next.board !== project.board ||
+        (next.pieces === project.pieces && next.tiles === project.tiles)) return next;
+    const storedHeight = next.worktableHeight ?? next.worktable;
+    const types = next.tiles === project.tiles ? placementIndex.tileTypes : new Map(next.tiles.map(tile => [tile.id, tile]));
+    let height = storedHeight;
+    for (const piece of next.pieces) {
+      if (!Model.isOnWorktable(table, piece)) continue;
+      const { minY, maxY } = Model.pieceGeometry(types.get(piece.tileId), piece);
+      height = Math.max(height, -2 * minY, 2 * maxY);
+    }
+    return height > storedHeight ? { ...next, worktableHeight: Math.min(10000, height) } : next;
+  }
+
+  function editingIndex(snapshot = project, excludedIds) {
+    const index = new Model.PlacementIndex(snapshot, excludedIds);
+    index.worktable = placementIndex.worktable;
+    return index;
   }
 
   function useProject(next, save = true) {
@@ -154,6 +176,7 @@
     if (next.worktable !== project.worktable) {
       worktableVisible = next.worktable !== undefined;
       tableView.zoom = 1;
+      tableView.fitted = false;
       tableView.center = { x: 0, y: 0 };
     }
     project = next;
@@ -823,11 +846,20 @@
   }
 
   function renderView() {
-    const { board } = project;
+    const { board, worktable, worktableHeight = worktable ?? 0 } = project;
     renderSurfaceView(boardView, board.width, board.height);
-    const table = placementIndex?.worktable;
+    const width = tableView.canvas.clientWidth;
+    const height = tableView.canvas.clientHeight;
+    const visibleHeight = worktableVisible && width ? Math.min(10000, worktable * height / width) : 0;
+    const table = Model.worktableBounds(board, worktable, Math.max(worktableHeight, visibleHeight));
+    if (placementIndex) placementIndex.worktable = table;
+    const previous = tableView.bounds;
+    if (table?.minX !== previous?.minX || table?.maxX !== previous?.maxX || table?.maxY !== previous?.maxY) {
+      renderWorktable(table, layers.worktable, layers.worktableClip);
+      tableView.bounds = table;
+    }
     if (table && worktableVisible) {
-      renderSurfaceView(tableView, project.worktable, project.worktable, (table.minX + table.maxX) / 2);
+      renderSurfaceView(tableView, worktable, table.maxY - table.minY, (table.minX + table.maxX) / 2);
     }
   }
 
@@ -835,11 +867,20 @@
     const screenWidth = view.canvas.clientWidth;
     const screenHeight = view.canvas.clientHeight;
     if (!screenWidth || !screenHeight) return;
-    const gutter = view === boardView ? Math.min(52, screenWidth / 8) : 10;
-    const fitWidth = Math.max(screenWidth - 2 * gutter, screenWidth / 2);
-    const fitHeight = Math.max(screenHeight - 2 * gutter, screenHeight / 2);
-    const margin = view === boardView ? Math.max(surfaceWidth, surfaceHeight) * .12 : 0;
-    const unitsPerPixel = Math.max((surfaceWidth + margin) / fitWidth, (surfaceHeight + margin) / fitHeight) / view.zoom;
+    let baseScale;
+    if (view === tableView) {
+      const horizontal = surfaceWidth / screenWidth;
+      const vertical = surfaceHeight / screenHeight;
+      baseScale = horizontal;
+      view.fitZoom = baseScale / Math.max(horizontal, vertical);
+      if (view.fitted) view.zoom = view.fitZoom;
+    } else {
+      const gutter = Math.min(52, screenWidth / 8);
+      const margin = Math.max(surfaceWidth, surfaceHeight) * .12;
+      baseScale = Math.max((surfaceWidth + margin) / (screenWidth - 2 * gutter),
+        (surfaceHeight + margin) / Math.max(screenHeight - 2 * gutter, screenHeight / 2));
+    }
+    const unitsPerPixel = baseScale / view.zoom;
     const width = screenWidth * unitsPerPixel;
     const height = screenHeight * unitsPerPixel;
     view.unitsPerPixel = unitsPerPixel;
@@ -848,7 +889,7 @@
     ].join(' '));
     byId(view.zoomId + '-level').textContent = I18n.percent(view.zoom);
     byId(view.zoomId + '-in').disabled = view.zoom >= 12;
-    byId(view.zoomId + '-out').disabled = view.zoom <= .25;
+    byId(view.zoomId + '-out').disabled = view.zoom <= minimumZoom(view);
     if (view !== boardView) return;
 
     const { board } = project;
@@ -966,7 +1007,7 @@
       !Model.fitsBoard(board, placementIndex.geometry(piece)))) {
       return false;
     }
-    const nextTable = Model.worktableBounds(board, project.worktable);
+    const nextTable = Model.worktableBounds(board, project.worktable, project.worktableHeight);
     const offsetX = table ? nextTable.minX - table.minX : 0;
     const pieces = offsetX ? project.pieces.map(piece => Model.isOnWorktable(table, piece) ?
       { ...piece, x: piece.x + offsetX } : piece) : project.pieces;
@@ -1245,7 +1286,7 @@
     if (previous && (previous.shape !== shape || previous.width !== width || previous.height !== height)) {
       const changed = project.pieces.filter(piece => piece.tileId === tile.id && !piece.outline);
       const unchanged = project.pieces.filter(piece => piece.tileId !== tile.id || piece.outline);
-      const index = new Model.PlacementIndex({ ...project, tiles, pieces: unchanged });
+      const index = editingIndex({ ...project, tiles, pieces: unchanged });
       for (const piece of changed) {
         const geometry = index.geometry(piece);
         if (!index.accepts(geometry)) {
@@ -1330,7 +1371,7 @@
       tile,
       angle,
       limit: Math.min(limit, Model.MAX_PIECES - project.pieces.length),
-      index: new Model.PlacementIndex(project),
+      index: editingIndex(),
       placed: []
     };
   }
@@ -1572,7 +1613,7 @@
     const dy = point.y - origin.y;
     if (!current.index && Math.hypot(dx, dy) < .4) return;
     if (!current.index) {
-      current.index = new Model.PlacementIndex(project, selectedIds);
+      current.index = editingIndex(project, selectedIds);
       for (const piece of pieces) markPiece(piece.id, 'moving-piece', true);
     }
     const { offset, valid } = groupPlacement(current, current.index, { x: dx, y: dy }, true);
@@ -1623,7 +1664,7 @@
 
   function preparePaste() {
     // Preserve the copied spacing. Only a physical overlap inside the group invalidates it.
-    const index = new Model.PlacementIndex({ ...project, seam: 0, pieces: [] });
+    const index = editingIndex({ ...project, seam: 0, pieces: [] });
     const preview = svgElement('g', { class: 'paste-preview' });
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const piece of copiedPieces) {
@@ -1973,7 +2014,7 @@
     }
     // The rotation preserves the spacing within the selection, including shared cut edges.
     const rotated = Model.rotatePieces(selected, degrees);
-    const index = new Model.PlacementIndex(project, selectedIds);
+    const index = editingIndex(project, selectedIds);
     if (!rotated.every(piece => index.accepts(index.geometry(piece)))) {
       notify(selected.length === 1 ? 'rotationBlocked' : 'groupRotationBlocked');
       renderSelection();
@@ -1991,18 +2032,27 @@
     commit({ ...project, pieces });
   }
 
-  function resetView(view = boardView) {
+  function minimumZoom(view) {
+    return view === tableView ? Math.min(.25, view.fitZoom) : .25;
+  }
+
+  function resetView(view = boardView, fit = false) {
     if (gesture) return;
+    if (view === tableView) view.fitted = fit;
     view.zoom = 1;
     view.center = { x: 0, y: 0 };
     renderView();
     if (view === previewView) layers.preview.replaceChildren();
   }
 
+  function fitSavedWorktable() {
+    if (worktableVisible && project.pieces.some(piece => belongsToView(piece, tableView))) resetView(tableView, true);
+  }
+
   function changeZoom(view, factor, event) {
     if (gesture) return;
     const { zoom } = view;
-    const nextZoom = Math.min(12, Math.max(.25, zoom * factor));
+    const nextZoom = Math.min(12, Math.max(minimumZoom(view), zoom * factor));
     if (event && zoom !== nextZoom) {
       const point = surfacePoint(event, view);
       const ratio = zoom / nextZoom;
@@ -2010,6 +2060,7 @@
       view.center.x += (point.x - (x + width / 2)) * (1 - ratio);
       view.center.y += (point.y - (y + height / 2)) * (1 - ratio);
     }
+    if (view === tableView) view.fitted = false;
     view.zoom = nextZoom;
     renderView();
     if (view === previewView) layers.preview.replaceChildren();
@@ -2063,6 +2114,7 @@
     resetView(tableView);
     worktableVisible = restored.worktable !== undefined;
     commit(restored);
+    fitSavedWorktable();
     setTool('draw');
     notify('projectOpened');
   }
@@ -2278,7 +2330,7 @@
   for (const view of views) {
     byId(view.zoomId + '-in').addEventListener('click', () => changeZoom(view, 1.25));
     byId(view.zoomId + '-out').addEventListener('click', () => changeZoom(view, .8));
-    byId(view.zoomId + '-fit').addEventListener('click', () => resetView(view));
+    byId(view.zoomId + '-fit').addEventListener('click', () => resetView(view, true));
     view.stage.addEventListener('wheel', event => {
       if (gesture || event.target.closest('.zoom-controls')) return;
       event.preventDefault();
@@ -2306,6 +2358,7 @@
     try {
       const saved = await Storage.load();
       useProject(saved ? Model.readProject(saved) : project);
+      fitSavedWorktable();
     } catch {
       useProject(project, false);
       setSaveStatus('loadFailed');
