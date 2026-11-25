@@ -37,6 +37,30 @@
     return ((angle % 360) + 360) % 360;
   }
 
+  function rotatePieces(pieces, degrees) {
+    let sumX = 0;
+    let sumY = 0;
+    for (const piece of pieces) {
+      sumX += piece.x;
+      sumY += piece.y;
+    }
+    const centerX = sumX / pieces.length;
+    const centerY = sumY / pieces.length;
+    const radians = degrees * Math.PI / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    return pieces.map(piece => {
+      const x = piece.x - centerX;
+      const y = piece.y - centerY;
+      return {
+        ...piece,
+        x: centerX + x * cos - y * sin,
+        y: centerY + x * sin + y * cos,
+        angle: angleInDegrees(piece.angle + degrees)
+      };
+    });
+  }
+
   function triangleHeight(side) {
     return side * Math.sqrt(3) / 2;
   }
@@ -1709,7 +1733,7 @@
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
     fitsBoard, gridOrigin, guideFromDrag, isOnWorktable, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, SPLIT_FRACTIONS, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    referenceWidthLimit, rotatePieces, sampleOutline, sampleSegment, SPLIT_FRACTIONS, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions, worktableBounds
   };
 

@@ -44,6 +44,7 @@
   const triangleAngle = byId('tile-apex-angle');
   const drawRotation = byId('draw-rotation');
   const drawAngleInput = byId('draw-angle');
+  const selectedAngleInput = byId('selected-angle');
   const seamColorInput = byId('seam-color');
   const expandLibrary = byId('expand-library');
   const copyTilesButton = byId('copy-tiles');
@@ -756,10 +757,6 @@
     return selectedIds.size ? project.pieces.filter(piece => selectedIds.has(piece.id)) : [];
   }
 
-  function singleSelectedPiece() {
-    return selectedIds.size === 1 ? currentSelection()[0] : undefined;
-  }
-
   function renderSelection() {
     const pieces = currentSelection();
     const fragment = document.createDocumentFragment();
@@ -776,10 +773,10 @@
     const title = single ? (pieces[0].outline ? 'selectedCutTile' : 'selectedTile') : 'selectedTiles';
     byId('selected-title').textContent = t(title);
     byId('selected-name').textContent = single ? placementIndex.tileTypes.get(pieces[0].tileId).name : pieceCount(pieces.length);
-    byId('selected-angle-field').hidden = !single;
-    byId('rotate').hidden = !single;
+    byId('selected-angle-label').textContent = t(single ? 'rotation' : 'rotateSelectionBy');
+    selectedAngleInput.setAttribute('aria-label', t(single ? 'tileAngle' : 'rotateSelectionBy'));
+    selectedAngleInput.value = single ? Math.round(pieces[0].angle * 10) / 10 : 0;
     byId('delete-piece-label').textContent = t(single ? 'deleteTile' : 'deleteSelectedTiles');
-    if (single) byId('selected-angle').value = Math.round(pieces[0].angle * 10) / 10;
   }
 
   function renderView() {
@@ -1786,30 +1783,25 @@
     else notify('linePlacementBlocked');
   }
 
-  function updateSelected(candidate) {
-    const pieces = project.pieces.map(piece => piece.id === candidate.id ? candidate : piece);
-    commit({ ...project, pieces });
-  }
-
-  function rotateSelected(angle) {
-    if (pendingPaste) return;
-    const selected = singleSelectedPiece();
-    if (!selected) return;
-    if (!Number.isFinite(angle)) {
+  function rotateSelected(angle, { absolute = false } = {}) {
+    if (gesture || pendingPaste || !selectedIds.size) return;
+    const selected = currentSelection();
+    const degrees = absolute ? Model.angleInDegrees(angle) - selected[0].angle : angle % 360;
+    if (!degrees) {
       renderSelection();
       return;
     }
-    const candidate = { ...selected, angle: Model.angleInDegrees(angle) };
-    if (candidate.angle === selected.angle) {
-      renderSelection();
-      return;
-    }
+    // The rotation preserves the spacing within the selection, including shared cut edges.
+    const rotated = Model.rotatePieces(selected, degrees);
     const index = new Model.PlacementIndex(project, selectedIds);
-    if (index.accepts(index.geometry(candidate))) updateSelected(candidate);
-    else {
-      notify('rotationBlocked');
+    if (!rotated.every(piece => index.accepts(index.geometry(piece)))) {
+      notify(selected.length === 1 ? 'rotationBlocked' : 'groupRotationBlocked');
       renderSelection();
+      return;
     }
+    const replacements = new Map(rotated.map(piece => [piece.id, piece]));
+    const pieces = project.pieces.map(piece => replacements.get(piece.id) || piece);
+    commit({ ...project, pieces });
   }
 
   function removeSelected() {
@@ -1981,8 +1973,7 @@
       if (drawAngleInput) drawAngleInput.value = drawAngle;
       return;
     }
-    const selected = singleSelectedPiece();
-    if (selected) rotateSelected(selected.angle + 15);
+    rotateSelected(15);
   }
 
   byId('language-select').addEventListener('change', event => {
@@ -2045,7 +2036,15 @@
     });
   }
   byId('rotate').addEventListener('click', rotateByStep);
-  byId('selected-angle').addEventListener('change', event => rotateSelected(event.target.valueAsNumber));
+  selectedAngleInput.addEventListener('change', () => {
+    rotateSelected(selectedAngleInput.valueAsNumber, { absolute: selectedIds.size === 1 });
+  });
+  selectedAngleInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      selectedAngleInput.blur();
+    }
+  });
   byId('delete-piece').addEventListener('click', removeSelected);
   byId('zoom-in').addEventListener('click', () => changeZoom(1.25));
   byId('zoom-out').addEventListener('click', () => changeZoom(.8));

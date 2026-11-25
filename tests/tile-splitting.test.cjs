@@ -31,6 +31,20 @@ for (const seam of [0, 2, 50]) {
   assert.throws(() => Model.readProject(saved), /invalidProject/);
 }
 
+const rotated = Model.rotatePieces(pieces, -90);
+const pivotX = (pieces[0].x + pieces[1].x) / 2;
+const pivotY = (pieces[0].y + pieces[1].y) / 2;
+for (const [i, geometry] of [lower, upper].entries()) {
+  assert.equal(rotated[i].outline, pieces[i].outline);
+  assert.equal(rotated[i].angle, 300);
+  const { points } = Model.pieceGeometry(tile, rotated[i]);
+  for (const [j, point] of geometry.points.entries()) {
+    close(points[j].x, pivotX + (point.y - pivotY));
+    close(points[j].y, pivotY - (point.x - pivotX));
+  }
+}
+assert.deepEqual(Model.readProject({ ...project, seam: 2, pieces: rotated }).pieces, rotated);
+
 assert.equal(Model.splitPiece(tile, original, start, { x: 0, y: 1 }), undefined);
 assert.deepEqual(Model.readProject({ ...project, pieces: [original] }).pieces, [original]);
 

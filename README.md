@@ -27,7 +27,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - Add comma-separated tags to a tile type, such as `glass, outdoor`. The tag cloud shows how many tile types have each tag. Selecting multiple tags shows tile types that have all of them. Tags are saved with the project.
 - Choose **Grout width** and **Grout color** under **Board**. Each tile gets half the width around its edges, so tiles spaced at the minimum gap share a full-width joint. Set the width to zero to hide the grout. Changing the width redraws the grout and updates the minimum gap for subsequent placements. The color is saved with the project, and older files open with gray grout. Fill applies the enabled snapping options to its first tile, then uses the tile dimensions and grout width to place the remaining tiles.
 - Use the trash button in the library to remove a tile type. Tiles already placed with that type stay on the board and in the saved file.
-- Click a tile to select it. Drag from an empty spot to select multiple tiles, or Shift-click individual tiles to add them to or remove them from the selection. Drag a selected tile to move the entire selection. Choose **Delete selected** to remove those tiles together. You can also rotate a single selected tile.
+- Click a tile to select it. Drag from an empty spot to select multiple tiles, or Shift-click individual tiles to add them to or remove them from the selection. Drag a selected tile to move the entire selection. Press **R** or use the rotate button to turn the selection by 15° around its center. Enter a positive or negative angle under **Rotate by** to turn a group by a specific amount. Choose **Delete selected** to remove the tiles together.
 - Choose the scissors (**Split tile**) or press **X**, then drag a straight line across a tile. Both endpoints snap to corners and the quarter, midpoint, and three-quarter marks. A cut close to 90° locks perpendicular to the starting edge, including on rotated tiles. When this lock is active, the endpoint snaps where that perpendicular line meets the boundary. The measurements show how much of the starting edge each piece keeps. The two pieces touch along the cut, and you can move them apart to leave space for grout. Use Undo to restore the original tile.
 - Circles, ovals, and leaves show four snap points along their symmetry axes. On a leaf, drag from tip to tip or between the middle points of the two arcs. On a circle, drag from the rim toward the center to lock onto a diameter in that direction.
 - Select **Worktable** to open a small surface next to the board. Place a tile there or drag one over from the mosaic. After cutting it, drag the pieces you want back onto the mosaic. Worktable pieces are saved with the project and the mosaic inventory counts pieces on the board. Empty the worktable to close it.
@@ -55,7 +55,7 @@ To open a specific plan automatically, put its JSON file on the same web server 
 | X | Split tile |
 | Esc | Cancel paste or return to the Select tool |
 | Space + drag | Pan the view |
-| R | Rotate the freehand tile or a selected tile by 15° |
+| R | Rotate the freehand tile or the current selection by 15° |
 | Shift + click or drag | Modify the current selection |
 | Delete / Backspace | Delete selected tiles |
 | Ctrl / ⌘ + C | Copy selected tiles |

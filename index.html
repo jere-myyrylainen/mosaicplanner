@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#f9f9f6">
   <title>Mosaic Planner</title>
   <link rel="stylesheet" href="styles.css?v=18">
-  <script defer src="i18n.js?v=19"></script>
-  <script defer src="geometry.js?v=24"></script>
+  <script defer src="i18n.js?v=20"></script>
+  <script defer src="geometry.js?v=25"></script>
   <script defer src="board-renderer.js?v=9"></script>
   <script defer src="project-storage.js?v=1"></script>
-  <script defer src="editor.js?v=21"></script>
+  <script defer src="editor.js?v=22"></script>
 </head>
 <body inert>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -265,8 +265,8 @@
         <div class="panel-heading"><h2 id="selected-title"></h2></div>
         <p id="selected-name"></p>
         <div class="selected-actions">
-          <label class="field" id="selected-angle-field"><span data-text="rotation"></span><span class="number-field"><input type="number" id="selected-angle" step="1" data-aria-label="tileAngle"><span>°</span></span></label>
-          <button type="button" id="rotate" class="icon-button" data-title="rotateTitle" data-aria-label="rotateLabel"><svg class="icon"><use href="#i-rotate"/></svg></button>
+          <label class="field"><span id="selected-angle-label"></span><span class="number-field"><input type="number" id="selected-angle" step="1"><span>°</span></span></label>
+          <button type="button" id="rotate" class="icon-button" data-title="rotateTitle" data-aria-label="rotateLabel" aria-keyshortcuts="R"><svg class="icon"><use href="#i-rotate"/></svg></button>
           <button type="button" id="delete-piece" class="button delete-button quiet" data-title="deleteSelection"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg><span id="delete-piece-label"></span></button>
         </div>
       </section>
