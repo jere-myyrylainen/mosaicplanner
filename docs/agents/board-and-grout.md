@@ -4,6 +4,7 @@
 
 ## Preserve these behaviors
 
+- Use the same board shape and size form for a new project and for **Project → Board settings**. Apply all its geometry fields in one action. Keep grout width and color in the tile panel beside the library.
 - Keep the board centered at the origin. A circular board uses equal width and height. For a rounded rectangle, cap the corner radius at half the shorter dimension. Keep the rendered outline and `fitsBoard` consistent when changing supported shapes.
 - Render editor rulers on the top and left of the board's bounding box. Keep 10% ticks and format their values in millimetres from the left or top origin. Use the view's scale to size ruler text and thin crowded labels as space runs out.
 - Reject board geometry edits that leave any placed tile outside the new boundary. Check tile shape and rotation as part of the fit.
@@ -16,6 +17,7 @@
 
 ## Check changes
 
+- Start a project with each board shape and verify the library is retained. Cancel a new project and a board edit, then apply multiple changed fields and undo them together.
 - Test tiles near the edge of rectangular, circular, and rounded boards. Try a board resize that would exclude a placed tile.
 - Check rulers after resizing, changing language, zooming, panning, and fitting the board. At a typical fit, verify values at both ends and at every 10% tick.
 - Verify grout at zero and nonzero widths and compare the editor and viewer after saving a custom color.

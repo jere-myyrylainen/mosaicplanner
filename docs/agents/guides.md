@@ -4,6 +4,7 @@ The guide controls live in [index.html](../../index.html) and the gestures in [e
 
 ## Preserve these behaviors
 
+- Put grid visibility, spacing, line weight, offsets, and the move command under **Project → Guide grid settings**. Keep custom guide drawing in the left toolbar, custom guide visibility in **View**, and both snap choices behind the magnet in the bottom bar.
 - Keep `grid.visible` and `grid.guidesVisible` independent. `grid.snap` controls snapping to both visible sources. Saved projects use a top-level `guides` array. Files predating custom guides default to an empty array with custom guide visibility enabled.
 - Keep snapping to placed tiles independent of guide visibility and guide snapping. `grid.snapTiles` defaults to false in older projects. Use `PlacementIndex.snapPlacement` to prioritize a valid pair of nearby snap edges before trying single targets. Prefer the closer valid position between competing pairs.
 - On the worktable, use tile snap targets from the table itself. Grid and custom guide snapping apply to the mosaic board.

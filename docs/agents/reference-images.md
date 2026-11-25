@@ -4,6 +4,7 @@ The editor import and controls live in [editor.js](../../editor.js). [geometry.j
 
 ## Preserve these behaviors
 
+- Start image import from the left toolbar and show the selected image's controls in the right-side reference panel.
 - Validate PNG and JPEG using file signatures and decoded dimensions during image import. Keep per-image, total payload, and image count limits consistent with project validation in `readReferences`.
 - Store self-contained image data URLs in the project. `x` and `y` represent the image center, `width` is in millimetres, and `pixelWidth` and `pixelHeight` determine its aspect ratio.
 - Render references inside the board clip below the grid and tiles. Preserve visibility, opacity, scale, and position through save and reload.

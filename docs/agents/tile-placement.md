@@ -4,6 +4,7 @@ The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` 
 
 ## Preserve these behaviors
 
+- Keep drawing tools in the left toolbar and show shape, freehand rotation, and the selected tiles' controls above the canvas. Expose clipboard buttons when selecting or placing a copy.
 - Use `PlacementIndex` for board fit, overlap, and grout gap checks. Candidate placement in a stroke must account for both earlier tiles and tiles accepted during that stroke. Use the same placement rules for the preview and commit.
 - Use `tileVertices` for polygon outlines in both rendering and geometry. Ovals and leaves use a convex sampled outline for fit, contact, and erasing. Reserve facing-edge endpoint alignment for tiles with straight sides.
 - Use `PlacementIndex.snapPlacement` for tile-to-tile snapping. It projects the moving tile's center onto the contact outline determined by both tile shapes, their rotation, and the grout gap. Use committed pieces as snap targets and the current action's index to validate candidates.

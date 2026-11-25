@@ -11,6 +11,7 @@
 - The optional numeric `worktable` field records the square table's side length in millimetres. Both surfaces use the same piece list and coordinate space. Derive the table bounds from the board dimensions and validate that each piece fits on its surface. Files without the field open with only the mosaic board.
 - Use immutable snapshots for history and persistence. Keep zoom, active tools, selected pieces, and library filters as editor state. The language and library order are separate browser preferences.
 - Keep copied pieces and the paste preview in the editor session. Opening or starting a project clears the clipboard. Only committed copies enter the project snapshot and the undo history.
+- Collect the project name and board geometry before creating a project. Keep the current tile library and commit the new snapshot in one action.
 - Keep the current localStorage key and IndexedDB fallback compatible with previous saves. Preserve the behavior that newer saves take precedence when asynchronous writes finish and that a failed restore surfaces the load error.
 
 ## Check changes

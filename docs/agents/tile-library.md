@@ -10,6 +10,7 @@
 - Diamonds use two tip-to-tip dimensions. Ovals and leaves use their full width and height. The leaf tapers to two tips on its longer axis, with horizontal tips when the dimensions are equal. Use the shared tile renderer for library and inventory swatches so they show the actual proportions.
 - Archiving a type removes it from the active library while keeping placed pieces and their type definition in the project. Count placed pieces in inventory even if their type is archived, and show how many pieces of each type are cut.
 - The mosaic inventory counts pieces on the main board. Show the number of worktable pieces separately in the editor's status bar.
+- Show the current mosaic count next to the inventory icon. Give the disclosure a localized accessible name and keep its per-type breakdown in the panel.
 - Build library filters from active types. A color can belong to multiple families. Tag filtering requires all selected tags and uses normalized keys while retaining their display labels. Name sorting uses the active locale. The browser stores the selected sort order separately from the project.
 
 ## Check changes

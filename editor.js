@@ -9,8 +9,9 @@
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
   const guideTools = new Map([['guideLine', 'line'], ['guideSquare', 'square'], ['guideCircle', 'circle']]);
+  const guideModes = [...guideTools.keys(), 'guideErase'];
   const gridNumbers = { size: 'grid-size', weight: 'grid-weight', offsetX: 'grid-offset-x', offsetY: 'grid-offset-y' };
-  const gridChecks = { visible: 'grid-visible', guidesVisible: 'guides-visible', snap: 'grid-snap', snapTiles: 'tile-snap' };
+  const gridChecks = { guidesVisible: 'guides-visible', snap: 'grid-snap', snapTiles: 'tile-snap' };
   const editableFields = 'input, select, textarea, [contenteditable="true"]';
   const SNAP_PIXELS = 8;
   const colorFamilies = [
@@ -36,8 +37,14 @@
     preview: byId('preview-layer'),
     selection: byId('selection-layer')
   };
-  const newDialog = byId('new-dialog');
+  const boardDialog = byId('board-dialog');
+  const gridDialog = byId('grid-dialog');
+  const boardShapeInput = byId('board-shape');
+  const boardRadiusInput = byId('board-radius');
+  const gridForm = byId('grid-form');
   const tileDialog = byId('tile-dialog');
+  const dialogs = [boardDialog, gridDialog, tileDialog];
+  const disclosures = [...document.querySelectorAll('.app-menu, .status-popover')];
   const tileShapeInput = byId('tile-shape');
   const tileWidthInput = byId('tile-width');
   const tileHeightInput = byId('tile-height');
@@ -80,6 +87,8 @@
   let tileDraft;
   let triangleUsesAngle = false;
   let tool = 'draw';
+  let guideMode = 'guideLine';
+  let creatingProject = false;
   let drawAngle = 0;
   let drawHover;
   let boardHover;
@@ -217,6 +226,7 @@
   function renderReferenceControls() {
     const selected = selectedReference();
     byId('reference-controls').hidden = !selected;
+    byId('empty-references').hidden = Boolean(selected);
     byId('add-reference').disabled = addingReferences || project.references.length >= Model.MAX_REFERENCES;
     if (!selected) return;
     byId('reference-select').value = selected.id;
@@ -321,6 +331,7 @@
       if (added) {
         activeReferenceId = references[references.length - 1].id;
         commit({ ...project, references });
+        showDockPanel('references');
         byId('reference-controls').scrollIntoView({ block: 'nearest' });
       }
       const messages = [...new Set(problems)];
@@ -333,7 +344,11 @@
   }
 
   function bindReferences() {
-    byId('add-reference').addEventListener('click', () => byId('reference-file').click());
+    byId('add-reference').addEventListener('click', () => {
+      if (gesture) return;
+      showDockPanel('references');
+      byId('reference-file').click();
+    });
     byId('reference-file').addEventListener('change', importReferences);
     byId('reference-select').addEventListener('change', event => {
       if (gesture) return;
@@ -408,9 +423,12 @@
       count.total++;
       if (outline) count.cut++;
     }
-    const summary = [projectSizeText(), pieceCount(project.pieces.length - atTable)];
+    const summary = [projectSizeText()];
     if (atTable) summary.push(t('worktableCount', { count: atTable }));
     byId('work-count').textContent = summary.join(' · ');
+    const count = project.pieces.length - atTable;
+    byId('inventory-count').textContent = I18n.count(count);
+    byId('inventory-summary').setAttribute('aria-label', t('tileInventoryCount', { count }));
     renderInventory(placementIndex.tileTypes, counts);
   }
 
@@ -465,28 +483,24 @@
   }
 
   function renderSettings() {
-    const { board, grid, name, seam, seamColor } = project;
+    const { grid, name, seam, seamColor } = project;
     byId('project-name').value = name;
-    document.querySelectorAll('[name="board-shape"]').forEach(input => { input.checked = input.value === board.shape; });
-    renderBoardWidthLabel();
-    byId('board-width').value = board.width;
-    byId('board-height-field').hidden = board.shape === 'circle';
-    byId('board-height').value = board.height;
-    byId('board-radius-field').hidden = board.shape !== 'rounded';
-    byId('board-radius').max = Math.min(board.width, board.height) / 2;
-    byId('board-radius').value = board.radius;
     byId('seam-width').value = seam;
     if (seamColorInput && seamColor) seamColorInput.value = seamColor;
     renderGridSettings(grid);
   }
 
   function renderGridSettings(grid) {
-    for (const [key, id] of Object.entries(gridNumbers)) byId(id).value = grid[key];
     for (const [key, id] of Object.entries(gridChecks)) byId(id).checked = grid[key];
+    byId('snap-summary').classList.toggle('snapping-active', grid.snap || grid.snapTiles);
   }
 
-  function renderBoardWidthLabel() {
-    byId('board-width-label').textContent = t(project.board.shape === 'circle' ? 'diameter' : 'width');
+  function updateBoardShape() {
+    const circle = boardShapeInput.value === 'circle';
+    const rounded = boardShapeInput.value === 'rounded';
+    byId('board-width-label').textContent = t(circle ? 'diameter' : 'width');
+    byId('board-height-field').hidden = byId('board-height').disabled = circle;
+    byId('board-radius-field').hidden = boardRadiusInput.disabled = !rounded;
   }
 
   function tileSizeText(tile) {
@@ -708,6 +722,15 @@
     renderView();
   }
 
+  function showDockPanel(name) {
+    const references = name === 'references';
+    editor.classList.toggle('references-open', references);
+    byId('library-panel').hidden = references;
+    byId('reference-panel').hidden = !references;
+    byId('tiles-tab').setAttribute('aria-pressed', String(!references));
+    byId('references-tab').setAttribute('aria-pressed', String(references));
+  }
+
   function bindLibraryFilters() {
     byId('library-sort').addEventListener('change', event => {
       libraryOrder = event.target.value;
@@ -784,7 +807,7 @@
     const screenWidth = stage.clientWidth;
     const screenHeight = stage.clientHeight;
     if (!screenWidth || !screenHeight) return;
-    const rulerGutter = 52;
+    const rulerGutter = Math.min(52, screenWidth / 8);
     const fitWidth = Math.max(screenWidth - 2 * rulerGutter, screenWidth / 2);
     const fitHeight = Math.max(screenHeight - 2 * rulerGutter, screenHeight / 2);
     const table = placementIndex?.worktable;
@@ -859,6 +882,11 @@
       button.setAttribute('aria-pressed', button.dataset.tool === tool);
       button.disabled = !toolAvailable(button.dataset.tool);
     });
+    const usingGuides = guideModes.includes(tool);
+    if (usingGuides) guideMode = tool;
+    byId('guide-tools').hidden = !usingGuides;
+    byId('guide-tool').setAttribute('aria-pressed', String(usingGuides));
+    byId('guide-tool').disabled = !guideModes.some(toolAvailable);
     byId('tool-name').textContent = t(tool);
     const showRotation = tool === 'draw' && Boolean(drawRotation);
     const hint = byId('tool-hint');
@@ -870,6 +898,7 @@
   }
 
   function renderClipboardControls() {
+    byId('clipboard-tools').hidden = tool !== 'select' && tool !== 'paste';
     if (copyTilesButton) copyTilesButton.disabled = !selectedIds.size || Boolean(pendingPaste);
     if (pasteTilesButton) {
       pasteTilesButton.disabled = !copiedPieces.length;
@@ -889,21 +918,13 @@
     commit({ ...project, worktable });
   }
 
-  function changeBoard(changes) {
-    if (gesture) {
-      renderSettings();
-      return;
-    }
-    const board = { ...project.board, ...changes };
-    if (board.shape === 'circle') board.height = board.width;
-    board.radius = Math.min(board.radius, board.width / 2, board.height / 2);
-    if (Object.keys(board).every(key => board[key] === project.board[key])) return;
+  function changeBoard(board) {
+    if (gesture) return false;
+    if (Object.keys(board).every(key => board[key] === project.board[key])) return true;
     const table = placementIndex.worktable;
     if (project.pieces.some(piece => !Model.isOnWorktable(table, piece) &&
       !Model.fitsBoard(board, placementIndex.geometry(piece)))) {
-      renderSettings();
-      notify('boardChangeBlocked');
-      return;
+      return false;
     }
     const nextTable = Model.worktableBounds(board, project.worktable);
     const offsetX = table ? nextTable.minX - table.minX : 0;
@@ -911,6 +932,47 @@
       { ...piece, x: piece.x + offsetX } : piece) : project.pieces;
     if (board.width !== project.board.width || board.height !== project.board.height) resetView();
     commit({ ...project, board, pieces });
+    return true;
+  }
+
+  function openBoardSettings(create) {
+    if (gesture) return;
+    closeDisclosures(true);
+    creatingProject = create;
+    const { board } = create ? Model.blankProject([]) : project;
+    byId('board-dialog-title').textContent = t(create ? 'startProject' : 'boardSettings');
+    byId('save-board').textContent = t(create ? 'createProject' : 'applySettings');
+    const showDescription = create && Boolean(project.pieces.length || project.references.length || project.guides.length);
+    byId('new-project-description').hidden = !showDescription;
+    if (showDescription) boardDialog.setAttribute('aria-describedby', 'new-project-description');
+    else boardDialog.removeAttribute('aria-describedby');
+    byId('new-project-name-field').hidden = !create;
+    byId('new-project-name').value = '';
+    byId('board-error').hidden = true;
+    boardShapeInput.value = board.shape;
+    byId('board-width').value = board.width;
+    byId('board-height').value = board.height;
+    boardRadiusInput.defaultValue = boardRadiusInput.value = board.radius;
+    updateBoardShape();
+    boardDialog.showModal();
+  }
+
+  function submitBoardSettings(event) {
+    event.preventDefault();
+    const shape = boardShapeInput.value;
+    const width = byId('board-width').valueAsNumber;
+    const height = shape === 'circle' ? width : byId('board-height').valueAsNumber;
+    const radius = boardRadiusInput.disabled ? Number(boardRadiusInput.defaultValue) : boardRadiusInput.valueAsNumber;
+    const board = { shape, width, height, radius: Math.min(radius, width / 2, height / 2) };
+    if (creatingProject) {
+      const name = byId('new-project-name').value.trim() || t('untitledProject');
+      boardDialog.close();
+      newProject(board, name);
+    } else if (changeBoard(board)) {
+      boardDialog.close();
+    } else {
+      byId('board-error').hidden = false;
+    }
   }
 
   function numericChange(id, oldValue, action) {
@@ -936,7 +998,7 @@
   }
 
   function bindSettings() {
-    for (const input of document.querySelectorAll('#project-name, .settings input[type="number"]')) {
+    for (const input of [byId('project-name'), byId('seam-width')]) {
       input.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
           event.preventDefault();
@@ -950,12 +1012,9 @@
       else event.target.value = project.name;
     });
 
-    for (const radio of document.querySelectorAll('[name="board-shape"]')) {
-      radio.addEventListener('change', () => changeBoard({ shape: radio.value }));
-    }
-    for (const key of ['width', 'height', 'radius']) {
-      numericChange('board-' + key, () => project.board[key], value => changeBoard({ [key]: value }));
-    }
+    boardShapeInput.addEventListener('change', updateBoardShape);
+    byId('board-form').addEventListener('input', () => { byId('board-error').hidden = true; });
+    byId('board-form').addEventListener('submit', submitBoardSettings);
     numericChange('seam-width', () => project.seam, seam => {
       if (gesture) {
         byId('seam-width').value = project.seam;
@@ -977,13 +1036,38 @@
       input.min = -Model.GRID_OFFSET_LIMIT;
       input.max = Model.GRID_OFFSET_LIMIT;
     }
-    for (const [key, id] of Object.entries(gridNumbers)) {
-      numericChange(id, () => project.grid[key], value => changeGrid({ [key]: value }));
-    }
     for (const [key, id] of Object.entries(gridChecks)) {
       const input = byId(id);
       input.addEventListener('change', () => changeGrid({ [key]: input.checked }));
     }
+    byId('grid-visible').addEventListener('change', event => { byId('move-grid').disabled = !event.target.checked; });
+    gridForm.addEventListener('submit', event => {
+      event.preventDefault();
+      applyGridSettings();
+    });
+    byId('move-grid').addEventListener('click', () => {
+      if (gridForm.reportValidity()) {
+        applyGridSettings();
+        setTool('moveGrid');
+      }
+    });
+  }
+
+  function openGridSettings() {
+    if (gesture) return;
+    closeDisclosures(true);
+    const { grid } = project;
+    byId('grid-visible').checked = grid.visible;
+    for (const [key, id] of Object.entries(gridNumbers)) byId(id).value = grid[key];
+    byId('move-grid').disabled = !grid.visible;
+    gridDialog.showModal();
+  }
+
+  function applyGridSettings() {
+    const grid = { visible: byId('grid-visible').checked };
+    for (const [key, id] of Object.entries(gridNumbers)) grid[key] = byId(id).valueAsNumber;
+    gridDialog.close();
+    changeGrid(grid);
   }
 
   function nextId(prefix) {
@@ -1291,7 +1375,7 @@
 
   function beginPointer(event) {
     if (gesture || (event.button !== 0 && event.button !== 1)) return;
-    if (tileDialog.open || newDialog.open) return;
+    if (dialogs.some(dialog => dialog.open)) return;
     const focused = document.activeElement;
     if ((drawAngleInput && focused === drawAngleInput) ||
         ((tool === 'select' || tool === 'split' || pendingPaste) && focused?.closest(editableFields))) focused.blur();
@@ -1867,7 +1951,7 @@
       notify('projectDragActive');
       return;
     }
-    if (tileDialog.open) tileDialog.close();
+    for (const dialog of dialogs) if (dialog.open) dialog.close();
     projectGeneration++;
     copiedPieces = [];
     selectedIds.clear();
@@ -1878,25 +1962,27 @@
     notify('projectOpened');
   }
 
-  function newProject() {
+  function newProject(board, name) {
     if (gesture) return;
     projectGeneration++;
     copiedPieces = [];
     selectedIds.clear();
     clearLibraryFilters();
     resetView();
-    commit(Model.blankProject(project.tiles.filter(tile => !tile.archived), t('untitledProject')));
+    const empty = Model.blankProject(project.tiles.filter(tile => !tile.archived), name);
+    commit({ ...empty, board });
     setTool('draw');
+    showDockPanel('tiles');
     byId('project-name').focus();
     byId('project-name').select();
   }
 
   function onKeyDown(event) {
-    if (!placementIndex || tileDialog.open || newDialog.open) return;
+    if (!placementIndex || dialogs.some(dialog => dialog.open)) return;
     const key = event.key.toLowerCase();
     if (key === 'escape') {
       event.preventDefault();
-      returnToSelection();
+      if (!closeDisclosures(true)) returnToSelection();
       return;
     }
     if ((event.metaKey || event.ctrlKey) && key === 's') {
@@ -1919,7 +2005,7 @@
     }
     if (gesture) return;
     if (event.code === 'Space') {
-      if (event.target.closest('button')) return;
+      if (event.target.closest('button, summary')) return;
       event.preventDefault();
       spacePressed = true;
       drawHover = undefined;
@@ -1947,11 +2033,6 @@
       setTool('select');
       return;
     }
-    const inventory = byId('piece-inventory');
-    if (inventory.open) {
-      inventory.open = false;
-      byId('inventory-summary').focus();
-    }
     applySelection(new Set());
     setTool('select');
   }
@@ -1978,7 +2059,6 @@
 
   byId('language-select').addEventListener('change', event => {
     I18n.choose(event.target.value);
-    renderBoardWidthLabel();
     renderTools();
     renderReferenceControls();
     renderPieceSummary();
@@ -1997,6 +2077,14 @@
   byId('library-resizer')?.remove();
   expandLibrary?.addEventListener('click', toggleLibraryLayout);
   bindReferences();
+  document.querySelectorAll('[data-dock-panel]').forEach(button => {
+    button.addEventListener('click', () => {
+      if (!gesture) showDockPanel(button.dataset.dockPanel);
+    });
+  });
+  byId('guide-tool').addEventListener('click', () => {
+    setTool(toolAvailable(guideMode) ? guideMode : guideModes.find(toolAvailable));
+  });
   document.querySelectorAll('[data-tool].tool').forEach(button => {
     button.addEventListener('click', () => setTool(button.dataset.tool));
   });
@@ -2017,7 +2105,10 @@
   tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
-  worktableButton?.addEventListener('click', toggleWorktable);
+  worktableButton?.addEventListener('click', () => {
+    closeDisclosures(true);
+    toggleWorktable();
+  });
   copyTilesButton?.addEventListener('click', copySelection);
   pasteTilesButton?.addEventListener('click', () => {
     if (pendingPaste) setTool('select');
@@ -2049,19 +2140,37 @@
   byId('zoom-in').addEventListener('click', () => changeZoom(1.25));
   byId('zoom-out').addEventListener('click', () => changeZoom(.8));
   byId('zoom-fit').addEventListener('click', resetView);
-  byId('new-project').addEventListener('click', () => {
-    if (project.pieces.length || project.references.length || project.guides.length) {
-      newDialog.returnValue = '';
-      newDialog.showModal();
-    } else newProject();
+  byId('new-project').addEventListener('click', () => openBoardSettings(true));
+  byId('edit-board').addEventListener('click', () => openBoardSettings(false));
+  byId('edit-grid').addEventListener('click', openGridSettings);
+  document.querySelectorAll('[data-close-dialog]').forEach(button => {
+    button.addEventListener('click', () => button.closest('dialog').close());
   });
-  newDialog.addEventListener('close', () => {
-    if (newDialog.returnValue === 'new') newProject();
+  byId('save-project').addEventListener('click', () => {
+    closeDisclosures(true);
+    exportProject();
   });
-  newDialog.addEventListener('cancel', returnToSelection);
-  byId('save-project').addEventListener('click', exportProject);
-  byId('open-project').addEventListener('click', () => byId('import-file').click());
+  byId('open-project').addEventListener('click', () => {
+    closeDisclosures(true);
+    byId('import-file').click();
+  });
   byId('import-file').addEventListener('change', importProject);
+
+  function closeDisclosures(restoreFocus = false, keep) {
+    let closed = false;
+    for (const disclosure of disclosures) {
+      if (!disclosure.open || disclosure === keep) continue;
+      const summary = disclosure.querySelector('summary');
+      disclosure.open = false;
+      if (restoreFocus) summary.focus({ preventScroll: true });
+      closed = true;
+    }
+    return closed;
+  }
+
+  document.addEventListener('click', event => {
+    closeDisclosures(false, event.target.closest('.app-menu, .status-popover'));
+  });
 
   stage.addEventListener('wheel', event => {
     if (gesture || event.target.closest('.zoom-controls')) return;
