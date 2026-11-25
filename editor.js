@@ -21,6 +21,7 @@
 
   const byId = id => document.getElementById(id);
   const editor = document.querySelector('.editor');
+  const outlineButtons = [...document.querySelectorAll('[data-outline-shape]')];
   const canvas = byId('canvas');
   const stage = byId('stage');
   const layers = {
@@ -96,6 +97,7 @@
   let tileDraft;
   let triangleUsesAngle = false;
   let tool = 'draw';
+  let outlineShape = 'rectangle';
   let guideMode = 'guideLine';
   let creatingProject = false;
   let drawAngle = 0;
@@ -935,7 +937,7 @@
   }
 
   function renderTools() {
-    if (!toolAvailable(tool)) tool = 'select';
+    if (!toolAvailable(tool)) tool = (guideModes.includes(tool) && guideModes.find(toolAvailable)) || 'select';
     for (const view of views) view.stage.dataset.tool = tool;
     document.querySelectorAll('[data-tool].tool').forEach(button => {
       button.setAttribute('aria-pressed', button.dataset.tool === tool);
@@ -943,17 +945,31 @@
     });
     const usingGuides = guideModes.includes(tool);
     if (usingGuides) guideMode = tool;
-    byId('guide-tools').hidden = !usingGuides;
     byId('guide-tool').setAttribute('aria-pressed', String(usingGuides));
     byId('guide-tool').disabled = !guideModes.some(toolAvailable);
+    renderSubtoolRail('guide', usingGuides);
+    renderSubtoolRail('shape', tool === 'shape');
+    for (const button of outlineButtons) {
+      button.setAttribute('aria-pressed', String(button.dataset.outlineShape === outlineShape));
+    }
     byId('tool-name').textContent = t(tool);
     const showRotation = tool === 'draw' && Boolean(drawRotation);
     const hint = byId('tool-hint');
     hint.textContent = t(tool + 'Hint');
     hint.hidden = showRotation;
     if (drawRotation) drawRotation.hidden = !showRotation;
-    byId('outline-field').hidden = tool !== 'shape';
     renderClipboardControls();
+  }
+
+  function renderSubtoolRail(name, visible) {
+    const button = byId(name + '-tool');
+    const rail = byId(name + '-tools');
+    if (!visible && rail.contains(document.activeElement)) {
+      const target = button.disabled ? document.querySelector('.tool-rail [data-tool="select"]') : button;
+      target.focus({ preventScroll: true });
+    }
+    button.setAttribute('aria-expanded', String(visible));
+    rail.hidden = !visible;
   }
 
   function renderClipboardControls() {
@@ -1563,7 +1579,7 @@
       const spacing = Model.lineSpacing(tile, project.seam, start, end);
       return { path: [start, end], points: Model.sampleSegment(start, end, spacing).points };
     }
-    const path = Model.outlinePath(byId('outline-shape').value, start, end);
+    const path = Model.outlinePath(outlineShape, start, end);
     return { path, points: Model.sampleOutline(tile, project.seam, path) };
   }
 
@@ -2243,8 +2259,16 @@
     });
   });
   byId('guide-tool').addEventListener('click', () => {
-    setTool(toolAvailable(guideMode) ? guideMode : guideModes.find(toolAvailable));
+    const next = toolAvailable(guideMode) ? guideMode : guideModes.find(toolAvailable);
+    if (next) setTool(next);
   });
+  for (const button of outlineButtons) {
+    button.addEventListener('click', () => {
+      if (gesture || !toolAvailable('shape')) return;
+      outlineShape = button.dataset.outlineShape;
+      setTool('shape');
+    });
+  }
   document.querySelectorAll('[data-tool].tool').forEach(button => {
     button.addEventListener('click', () => setTool(button.dataset.tool));
   });

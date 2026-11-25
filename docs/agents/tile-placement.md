@@ -4,7 +4,7 @@ The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` 
 
 ## Preserve these behaviors
 
-- Keep drawing tools in the left toolbar and show shape, freehand rotation, and the selected tiles' controls above the canvas. Expose clipboard buttons when selecting or placing a copy.
+- Keep drawing tools in the left toolbar. Show separate rectangle and ellipse buttons in the adjacent toolbar while Shape is active. Start the adjacent toolbar beside the button immediately above its parent and hide it when the active tool has no available options. Show freehand rotation and selected tiles' controls above the canvas. Expose clipboard buttons when selecting or placing a copy.
 - Use `PlacementIndex` for board fit, overlap, and grout gap checks. Candidate placement in a stroke must account for both earlier tiles and tiles accepted during that stroke. Use the same placement rules for the preview and commit.
 - Use `tileVertices` for polygon outlines in both rendering and geometry. Ovals and leaves use a convex sampled outline for fit, contact, and erasing. Reserve facing-edge endpoint alignment for tiles with straight sides.
 - Use `PlacementIndex.snapPlacement` for tile-to-tile snapping. It projects the moving tile's center onto the contact outline determined by both tile shapes, their rotation, and the grout gap. Use committed pieces as snap targets and the current action's index to validate candidates.
@@ -22,6 +22,7 @@ The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` 
 ## Check changes
 
 - Test an allowed and blocked placement with grout and rotation. Try a freehand drag, a line or outline, and a fill next to existing tiles.
+- Use both shape buttons to preview and draw their outlines. Verify toolbar alignment on narrow and wide screens and check that selecting another tool hides the options.
 - Check group movement with snapping enabled, movement blocked by another tile, and undo after a drag or erase.
 - Rotate mixed tiles and touching cut fragments with the button, the R shortcut, and a signed angle. Verify that the pivot stays fixed, one blocked tile rejects the whole rotation, and undo and redo restore the entire group.
 - Copy and paste a single tile and a mixed selection with rotated tiles. Verify preview, group snapping, rejection when any tile collides or crosses the board edge, cancellation, repeated paste, and undo and redo of the whole group. Test the toolbar, keyboard shortcuts, and touch placement.

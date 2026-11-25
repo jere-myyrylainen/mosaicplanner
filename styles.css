@@ -144,10 +144,24 @@ h1 { margin: 0; font-size: 1.07rem; font-weight: 750; letter-spacing: -.035em; }
 .editor.library-expanded:not(.references-open) { --library-width: clamp(320px, 38%, 760px); }
 .editor.worktable-open.library-expanded:not(.references-open) { --library-width: clamp(224px, 34vw, 600px); }
 .tool-rail {
-  grid-area: tools; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: .45rem .25rem;
+  --tool-gap: 3px;
+  --tool-inset: .25rem;
+  grid-area: tools; position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;
+  gap: var(--tool-gap); padding: .45rem var(--tool-inset);
   min-width: 0; background: var(--paper); border-right: 1px solid var(--line);
 }
+.tool-family { position: relative; align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: var(--tool-gap); }
+.subtool-rail {
+  --subtool-inset: .25rem;
+  position: absolute; top: calc(-1px - var(--subtool-inset)); left: calc(100% + var(--tool-inset) + 1px);
+  display: flex; flex-direction: column; gap: var(--tool-gap); padding: var(--subtool-inset);
+  background: var(--paper); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px #142c3830;
+}
 .tool-rail .icon-button { position: relative; }
+.tool-family > [aria-expanded]::after {
+  content: ""; position: absolute; right: 3px; bottom: 3px;
+  border-right: 4px solid currentColor; border-top: 4px solid transparent;
+}
 .tool-rail .tool[aria-pressed="true"]::before {
   position: absolute; left: 2px; height: .9rem; width: 2px; border-radius: 1px;
   background: currentColor; content: "";
@@ -216,7 +230,6 @@ select {
   background-repeat: no-repeat; background-position: right .55rem center;
 }
 .language-select { width: auto; justify-self: end; font-size: .875rem; font-weight: 650; }
-.outline-mode { font-size: .875rem; }
 .stage {
   min-width: 0; position: relative; overflow: hidden; isolation: isolate;
   background-color: var(--stage-bg);
@@ -492,7 +505,7 @@ dialog form > p { margin: 0; color: var(--muted); }
   .zoom-controls { right: .4rem; bottom: .4rem; }
 }
 @media (pointer: coarse) {
-  .tool-rail { padding-inline: 0; gap: 0; }
+  .tool-rail { --tool-inset: 0px; --tool-gap: 0px; }
   .tool-rail .icon-button, .status-popover summary { min-width: 44px; min-height: 44px; }
   .worktable-zoom .icon-button, .worktable-toggle { min-width: 44px; min-height: 44px; }
 }

@@ -6,18 +6,19 @@
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fcfdfa">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#242a26">
   <title>Mosaic Planner</title>
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
   <script defer src="i18n.js?v=22"></script>
   <script defer src="geometry.js?v=27"></script>
   <script defer src="board-renderer.js?v=11"></script>
   <script defer src="project-storage.js?v=1"></script>
-  <script defer src="editor.js?v=26"></script>
+  <script defer src="editor.js?v=27"></script>
 </head>
 <body inert>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="i-mosaic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
     <symbol id="i-rectangle" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14"/></symbol>
     <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></symbol>
+    <symbol id="i-ellipse" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="6"/></symbol>
     <symbol id="i-rounded" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="4"/></symbol>
     <symbol id="i-pointer" viewBox="0 0 24 24"><path d="m5 3 14 10-7 1-3 6L5 3Z"/></symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4M14 21h7"/></symbol>
@@ -94,13 +95,27 @@
     <aside class="tool-rail" data-aria-label="tools">
       <button type="button" class="icon-button tool" data-tool="select" data-title="selectTitle" data-aria-label="selectLabel" aria-keyshortcuts="V Escape"><svg class="icon"><use href="#i-pointer"/></svg></button>
       <button type="button" class="icon-button tool" data-tool="draw" data-title="drawTitle" data-aria-label="drawLabel"><svg class="icon"><use href="#i-pencil"/></svg></button>
-      <button type="button" class="icon-button tool" data-tool="line" data-title="lineTitle" data-aria-label="line"><svg class="icon"><use href="#i-line"/></svg></button>
-      <button type="button" class="icon-button tool" data-tool="shape" data-title="shapeTitle" data-aria-label="shapeLabel"><svg class="icon"><use href="#i-shape"/></svg></button>
+      <div class="tool-family">
+        <button type="button" class="icon-button tool" data-tool="line" data-title="lineTitle" data-aria-label="line"><svg class="icon"><use href="#i-line"/></svg></button>
+        <button type="button" id="shape-tool" class="icon-button tool" data-tool="shape" data-title="shapeTitle" data-aria-label="shapeLabel" aria-controls="shape-tools" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-shape"/></svg></button>
+        <div id="shape-tools" class="subtool-rail" hidden role="group" data-aria-label="outlineShape">
+          <button type="button" class="icon-button tool" data-outline-shape="rectangle" data-title="rectangle" data-aria-label="rectangle" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-rectangle"/></svg></button>
+          <button type="button" class="icon-button tool" data-outline-shape="ellipse" data-title="ellipse" data-aria-label="ellipse" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-ellipse"/></svg></button>
+        </div>
+      </div>
       <button type="button" class="icon-button tool" data-tool="fill" data-title="fillTitle" data-aria-label="fillLabel"><svg class="icon"><use href="#i-fill"/></svg></button>
       <button type="button" class="icon-button tool" data-tool="split" data-title="splitTitle" data-aria-label="split" aria-keyshortcuts="X"><svg class="icon" aria-hidden="true"><use href="#i-split"/></svg></button>
-      <button type="button" class="icon-button tool" data-tool="erase" data-title="eraseTitle" data-aria-label="erase" aria-keyshortcuts="E"><svg class="icon"><use href="#i-eraser"/></svg></button>
-      <div class="tool-separator" aria-hidden="true"></div>
-      <button type="button" id="guide-tool" class="icon-button tool" data-title="guides" data-aria-label="guides" aria-pressed="false" aria-controls="guide-tools"><svg class="icon" aria-hidden="true"><use href="#i-guides"/></svg></button>
+      <div class="tool-family">
+        <button type="button" class="icon-button tool" data-tool="erase" data-title="eraseTitle" data-aria-label="erase" aria-keyshortcuts="E"><svg class="icon"><use href="#i-eraser"/></svg></button>
+        <div class="tool-separator" aria-hidden="true"></div>
+        <button type="button" id="guide-tool" class="icon-button tool" data-title="guides" data-aria-label="guides" aria-pressed="false" aria-controls="guide-tools" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-guides"/></svg></button>
+        <div id="guide-tools" class="subtool-rail guide-tools" hidden role="group" data-aria-label="guides">
+          <button type="button" class="icon-button tool" data-tool="guideLine" data-title="guideLine" data-aria-label="guideLine"><svg class="icon" aria-hidden="true"><use href="#i-line"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="guideSquare" data-title="guideSquare" data-aria-label="guideSquare"><svg class="icon" aria-hidden="true"><use href="#i-shape"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="guideCircle" data-title="guideCircle" data-aria-label="guideCircle"><svg class="icon" aria-hidden="true"><use href="#i-circle"/></svg></button>
+          <button type="button" class="icon-button tool" data-tool="guideErase" data-title="guideErase" data-aria-label="guideErase"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg></button>
+        </div>
+      </div>
       <button type="button" id="add-reference" class="icon-button" data-title="addReferenceTitle" data-aria-label="addReference"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></button>
       <input type="file" id="reference-file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple hidden>
       <div class="tool-separator" aria-hidden="true"></div>
@@ -110,13 +125,6 @@
     <section class="workspace" data-aria-label="workspace">
       <div class="toolbar">
         <span class="tool-name" id="tool-name" aria-live="polite"></span>
-        <label id="outline-field" class="outline-mode" hidden><span class="sr-only" data-text="outlineShape"></span><select id="outline-shape"><option value="rectangle" data-text="rectangle"></option><option value="ellipse" data-text="ellipse"></option></select></label>
-        <div id="guide-tools" class="button-group guide-tools" hidden role="group" data-aria-label="guides">
-          <button type="button" class="icon-button tool" data-tool="guideLine" data-title="guideLine" data-aria-label="guideLine"><svg class="icon"><use href="#i-line"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="guideSquare" data-title="guideSquare" data-aria-label="guideSquare"><svg class="icon"><use href="#i-shape"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="guideCircle" data-title="guideCircle" data-aria-label="guideCircle"><svg class="icon"><use href="#i-circle"/></svg></button>
-          <button type="button" class="icon-button tool" data-tool="guideErase" data-title="guideErase" data-aria-label="guideErase"><svg class="icon"><use href="#i-delete"/></svg></button>
-        </div>
         <div id="draw-rotation" class="button-group" hidden>
           <label class="draw-angle">
             <span data-text="rotation"></span>
