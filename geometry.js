@@ -64,6 +64,18 @@
     ) <= radius + EPSILON;
   }
 
+  function worktableBounds(board, size) {
+    if (size === undefined) return;
+    const gap = Math.max(12, Math.min(board.width, board.height) / 10);
+    const minX = board.width / 2 + gap;
+    return { minX, maxX: minX + size, minY: -size / 2, maxY: size / 2 };
+  }
+
+  function isOnWorktable(table, point) {
+    // Pick a surface by the center's X coordinate before checking its outer edges.
+    return Boolean(table && point.x >= table.minX - EPSILON);
+  }
+
   function boardGuideAnchors(board) {
     const { width, height } = board;
     const radius = board.shape === 'circle' ? width / 2 : board.shape === 'rounded' ? board.radius : 0;
@@ -930,6 +942,7 @@
   class PlacementIndex {
     constructor(project, excludedIds) {
       this.board = project.board;
+      this.worktable = worktableBounds(project.board, project.worktable);
       this.gap = project.seam;
       this.tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
       this.cells = new Map();
@@ -969,12 +982,19 @@
     }
 
     accepts(geometry) {
-      return fitsBoard(this.board, geometry) && !this.hasConflict(geometry);
+      const table = this.worktable;
+      const fits = isOnWorktable(table, geometry.piece) ?
+        geometry.minX >= table.minX - EPSILON && geometry.maxX <= table.maxX + EPSILON &&
+        geometry.minY >= table.minY - EPSILON && geometry.maxY <= table.maxY + EPSILON :
+        fitsBoard(this.board, geometry);
+      return fits && !this.hasConflict(geometry);
     }
 
     hasConflict(geometry) {
+      const onTable = isOnWorktable(this.worktable, geometry.piece);
       for (const other of this.nearby(geometry, this.gap)) {
-        if (tooClose(geometry, other, this.gap)) return true;
+        const gap = onTable === isOnWorktable(this.worktable, other.piece) ? this.gap : 0;
+        if (tooClose(geometry, other, gap)) return true;
       }
       return false;
     }
@@ -998,7 +1018,9 @@
       const { piece, minX, minY, maxX, maxY } = geometry;
       const tiles = [];
       const margin = this.gap + limit;
+      const onTable = isOnWorktable(this.worktable, piece);
       for (const other of this.nearby(geometry, margin)) {
+        if (onTable !== isOnWorktable(this.worktable, other.piece)) continue;
         if (maxX + margin < other.minX || other.maxX + margin < minX ||
             maxY + margin < other.minY || other.maxY + margin < minY) continue;
         const parts = [];
@@ -1026,23 +1048,27 @@
     snapPlacement(project, piece, limit, accepts = candidate => this.accepts(candidate)) {
       const original = this.geometry(piece);
       const { grid } = project;
-      if (!grid.snap && !grid.snapTiles) return original;
+      const table = this.worktable;
+      const onTable = isOnWorktable(table, piece);
+      const snapGuides = grid.snap && !onTable;
+      if (!snapGuides && !grid.snapTiles) return original;
+      const acceptsOnSurface = candidate => isOnWorktable(table, candidate.piece) === onTable && accepts(candidate);
 
-      const guides = grid.snap ? nearbyGuideContacts(project, original, limit) : { custom: [], lattice: [] };
+      const guides = snapGuides ? nearbyGuideContacts(project, original, limit) : { custom: [], lattice: [] };
       const custom = [].concat(...guides.custom);
       const tiles = grid.snapTiles ? this.nearbyTileContacts(original, limit) : [];
       // Each edge must be within the snap tolerance. Two corrections can add up diagonally.
       const pairLimit = Math.SQRT2 * limit;
-      const gridAndTile = this.closestPlacement(piece, pairLimit, gridTileCrossings(tiles, guides.lattice), accepts);
+      const gridAndTile = this.closestPlacement(piece, pairLimit, gridTileCrossings(tiles, guides.lattice), acceptsOnSurface);
       const guideRange = gridAndTile ? Math.hypot(gridAndTile.piece.x - piece.x, gridAndTile.piece.y - piece.y) : pairLimit;
       // When laying the next tile in a row, preserve its joint to the placed neighbor.
       const crossingPoints = alignedGuideCrossings(project, guides, piece, limit, !gridAndTile);
-      const crossing = this.closestPlacement(piece, guideRange, crossingPoints, accepts) || gridAndTile;
+      const crossing = this.closestPlacement(piece, guideRange, crossingPoints, acceptsOnSurface) || gridAndTile;
       const crossingRange = crossing ? Math.hypot(crossing.piece.x - piece.x, crossing.piece.y - piece.y) : pairLimit;
-      const contact = this.closestPlacement(piece, crossingRange, tileCrossings(tiles, custom, original, limit), accepts);
+      const contact = this.closestPlacement(piece, crossingRange, tileCrossings(tiles, custom, original, limit), acceptsOnSurface);
       if (crossing) return contact || crossing;
 
-      if (grid.snap && (grid.visible || (grid.guidesVisible && project.guides.length))) {
+      if (snapGuides && (grid.visible || (grid.guidesVisible && project.guides.length))) {
         // Aiming at the visible crossing places the edge of the tile beside it.
         const reach = Math.SQRT2 * (tileReach(original) + project.seam / 2);
         const range = reach + pairLimit;
@@ -1051,21 +1077,21 @@
           const aimedTiles = this.nearbyTileContacts(original, range);
           const gridEdges = aimedGrid.vertical.concat(aimedGrid.horizontal);
           const points = aimedGridPoints(gridTileCrossings(aimedTiles, gridEdges), piece, aimedGrid.corner, true);
-          const joined = this.closestPlacement(piece, range, points, accepts);
+          const joined = this.closestPlacement(piece, range, points, acceptsOnSurface);
           if (joined) return joined;
         }
         const pointed = this.closestPlacement(piece, range,
-          pointedGuideCrossings(project, original, limit, reach, true, aimedGrid), accepts) ||
+          pointedGuideCrossings(project, original, limit, reach, true, aimedGrid), acceptsOnSurface) ||
           this.closestPlacement(piece, range,
-            pointedGuideCrossings(project, original, limit, reach, false, aimedGrid), accepts);
+            pointedGuideCrossings(project, original, limit, reach, false, aimedGrid), acceptsOnSurface);
         if (pointed) return pointed;
       }
       if (contact) return contact;
 
-      const guided = this.closestPlacement(piece, limit, contactProjections(guides.lattice.concat(custom), piece), accepts);
+      const guided = this.closestPlacement(piece, limit, contactProjections(guides.lattice.concat(custom), piece), acceptsOnSurface);
       const range = guided ? Math.hypot(guided.piece.x - piece.x, guided.piece.y - piece.y) : limit;
       const tileParts = [].concat(...tiles.map(tile => tile.parts));
-      return this.closestPlacement(piece, range, contactProjections(tileParts, piece), accepts) || guided || original;
+      return this.closestPlacement(piece, range, contactProjections(tileParts, piece), acceptsOnSurface) || guided || original;
     }
 
     *piecesAlong(start, end) {
@@ -1338,11 +1364,12 @@
   function readProject(value) {
     const error = 'invalidProject';
     if (!value || value.version !== 1 || !validText(value.name, 80)) throw new ValidationError(error);
-    const { board, grid, guides = [], tiles, pieces, seam, seamColor = DEFAULT_SEAM_COLOR } = value;
+    const { board, grid, guides = [], tiles, pieces, worktable, seam, seamColor = DEFAULT_SEAM_COLOR } = value;
     if (!board || !boardShapes.includes(board.shape) ||
         !validNumber(board.width, 1, 10000) || !validNumber(board.height, 1, 10000) ||
         !validNumber(board.radius, 0, Math.min(board.width, board.height) / 2) ||
         (board.shape === 'circle' && board.width !== board.height) ||
+        (worktable !== undefined && !validNumber(worktable, 1, 10000)) ||
         !validNumber(seam, 0, 100) || !validColor(seamColor) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
         !validNumber(grid.weight, .1, 10) ||
@@ -1382,6 +1409,7 @@
     const restored = blankProject([...tileTypes.values()]);
     restored.name = value.name.trim();
     restored.board = { shape: board.shape, width: board.width, height: board.height, radius: board.radius };
+    if (worktable !== undefined) restored.worktable = worktable;
     const { offsetX = 0, offsetY = 0 } = grid;
     restored.grid = {
       visible: grid.visible, size: grid.size, weight: grid.weight, offsetX, offsetY, snap: grid.snap,
@@ -1396,9 +1424,10 @@
     restored.seamColor = seamColor.toLowerCase();
     if (value.references !== undefined) restored.references = readReferences(value.references);
     const index = new PlacementIndex({ ...restored, seam: 0 });
+    const maxX = Math.max(5000, index.worktable ? index.worktable.maxX + EPSILON : 0);
     for (const piece of pieces) {
       if (!piece || !validText(piece.id, 100) || ids.has(piece.id) || !tileTypes.has(piece.tileId) ||
-          !validNumber(piece.x, -5000, 5000) || !validNumber(piece.y, -5000, 5000) ||
+          !validNumber(piece.x, -5000, maxX) || !validNumber(piece.y, -5000, 5000) ||
           !validNumber(piece.angle, -360, 360)) throw new ValidationError(error);
       const clean = { id: piece.id, tileId: piece.tileId, x: piece.x, y: piece.y, angle: angleInDegrees(piece.angle) };
       if (piece.outline !== undefined) clean.outline = readPieceOutline(piece.outline);
@@ -1414,9 +1443,9 @@
   const model = {
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
-    fitsBoard, gridOrigin, guideFromDrag, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
+    fitsBoard, gridOrigin, guideFromDrag, isOnWorktable, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
     referenceWidthLimit, sampleOutline, sampleSegment, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
-    validNumber, validReferenceDimensions
+    validNumber, validReferenceDimensions, worktableBounds
   };
 
   if (typeof module === 'object') module.exports = model;

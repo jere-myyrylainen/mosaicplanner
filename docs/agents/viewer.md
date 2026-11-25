@@ -8,6 +8,7 @@
 - Support local selection of a saved project and relative same-origin HTTP or HTTPS URLs passed as `?project=`. Use the shared project reader on both paths and let the latest load win if requests overlap.
 - Render saved board, tile, grout, and visibility state with the shared renderer. Keep zoom controls, scroll-to-pan, and Fit to view usable on narrow touch screens.
 - Render cut pieces and their grout from the saved local outlines using the shared renderer.
+- Validate both surfaces when opening a project with a worktable. Draw and count the pieces on the mosaic board in the viewer.
 
 ## Check changes
 

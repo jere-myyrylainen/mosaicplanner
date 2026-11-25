@@ -50,7 +50,6 @@
 
   function renderGrout({ pieces, seam, seamColor }, tileTypes, layer, elements) {
     if (!layer) return;
-    if (elements) elements.clear();
     layer.textContent = '';
     if (!seam || !seamColor) return;
 
@@ -74,7 +73,7 @@
     pattern.setAttribute('y', y);
   }
 
-  function renderBoard({ board, grid, guides }, layers) {
+  function renderBoard({ board, grid, guides, worktable }, layers) {
     const pattern = document.getElementById('grid-pattern');
     const lines = document.getElementById('grid-lines');
     const clip = document.getElementById('board-clip');
@@ -91,6 +90,16 @@
     layers.grid.textContent = '';
     if (grid.visible) layers.grid.appendChild(boardShape(board, { fill: 'url(#grid-pattern)' }));
     layers.grid.appendChild(boardShape(board, { class: 'board-outline', fill: 'none' }));
+    if (layers.worktable) {
+      layers.worktable.textContent = '';
+      layers.worktableClip.textContent = '';
+      const bounds = window.MosaicGeometry.worktableBounds(board, worktable);
+      if (bounds) {
+        const rect = { x: bounds.minX, y: bounds.minY, width: worktable, height: worktable };
+        layers.worktable.appendChild(svgElement('rect', { ...rect, class: 'board-shadow board-outline', fill: '#e2ebe2' }));
+        layers.worktableClip.appendChild(svgElement('rect', rect));
+      }
+    }
     layers.guides.textContent = '';
     if (grid.guidesVisible) {
       const fragment = document.createDocumentFragment();

@@ -160,6 +160,7 @@ select {
 .board-ruler { fill: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
 .board-ruler text { font-size: 11px; }
 .board-ruler line { stroke: #86988b; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.worktable-label { fill: var(--muted); font-weight: 650; }
 .guide-anchors {
   display: none; fill: none; stroke: #34579499; stroke-width: 4;
   stroke-linecap: round; vector-effect: non-scaling-stroke;

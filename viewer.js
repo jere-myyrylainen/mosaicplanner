@@ -65,8 +65,10 @@
       images.appendChild(image);
     }
     const tileTypes = new Map(next.tiles.map(tile => [tile.id, tile]));
+    const table = Model.worktableBounds(next.board, next.worktable);
+    const mosaicPieces = next.pieces.filter(piece => !Model.isOnWorktable(table, piece));
     const pieces = document.createDocumentFragment();
-    for (const piece of next.pieces) {
+    for (const piece of mosaicPieces) {
       const tile = tileTypes.get(piece.tileId);
       pieces.appendChild(pieceShape(piece, tile, { class: 'piece-face', fill: tile.color }));
     }
@@ -74,14 +76,14 @@
     renderBoard(next, layers);
     layers.references.textContent = '';
     layers.references.appendChild(images);
-    if (renderGrout) renderGrout(next, tileTypes, layers.grout);
+    if (renderGrout) renderGrout({ ...next, pieces: mosaicPieces }, tileTypes, layers.grout);
     layers.pieces.textContent = '';
     layers.pieces.appendChild(pieces);
     const { width, height } = next.board;
     const margin = Math.max(width, height) * .06;
     canvas.setAttribute('viewBox', [-width / 2 - margin, -height / 2 - margin,
       width + margin * 2, height + margin * 2].join(' '));
-    project = next;
+    project = { ...next, pieces: mosaicPieces };
     byId('viewer-name').textContent = project.name;
     byId('viewer-empty').hidden = true;
     byId('viewer-project').hidden = false;

@@ -23,9 +23,13 @@
   const stage = byId('stage');
   const layers = {
     board: byId('board-layer'),
+    worktable: byId('worktable-layer'),
+    worktableClip: byId('worktable-clip'),
+    worktableLabel: byId('worktable-label'),
     references: byId('reference-layer'),
     grid: byId('grid-layer'),
     grout: byId('grout-layer'),
+    worktableGrout: byId('worktable-grout-layer'),
     pieces: byId('piece-layer'),
     guides: byId('guide-layer'),
     rulers: byId('ruler-layer'),
@@ -45,6 +49,7 @@
   const copyTilesButton = byId('copy-tiles');
   const pasteTilesButton = byId('paste-tiles');
   const cancelPasteButton = byId('cancel-paste');
+  const worktableButton = byId('toggle-worktable');
   const past = [];
   const future = [];
   const pieceElements = new Map();
@@ -127,6 +132,10 @@
     if (pendingPaste && next.tiles !== project.tiles) {
       pendingPaste = undefined;
       tool = 'select';
+    }
+    if (next.worktable !== project.worktable) {
+      zoom = 1;
+      viewCenter = { x: 0, y: 0 };
     }
     project = next;
     if (!selectedReference()) activeReferenceId = project.references[0]?.id;
@@ -359,16 +368,21 @@
   }
 
   function renderPieces() {
-    const tileTypes = placementIndex.tileTypes;
-    renderGrout?.(project, tileTypes, layers.grout, groutElements);
+    const { tileTypes, worktable } = placementIndex;
+    const mosaicPieces = [];
+    const tablePieces = [];
     const fragment = document.createDocumentFragment();
     pieceElements.clear();
+    groutElements.clear();
     for (const piece of project.pieces) {
+      (Model.isOnWorktable(worktable, piece) ? tablePieces : mosaicPieces).push(piece);
       const tile = tileTypes.get(piece.tileId);
       const element = pieceShape(piece, tile, { class: 'piece-face', fill: tile.color, 'data-piece': piece.id });
       pieceElements.set(piece.id, element);
       fragment.append(element);
     }
+    renderGrout?.({ ...project, pieces: mosaicPieces }, tileTypes, layers.grout, groutElements);
+    renderGrout?.({ ...project, pieces: tablePieces }, tileTypes, layers.worktableGrout, groutElements);
     layers.pieces.replaceChildren(fragment);
     renderPieceSummary();
   }
@@ -380,13 +394,21 @@
 
   function renderPieceSummary() {
     const counts = new Map();
-    for (const { tileId, outline } of project.pieces) {
+    let atTable = 0;
+    for (const piece of project.pieces) {
+      if (Model.isOnWorktable(placementIndex.worktable, piece)) {
+        atTable++;
+        continue;
+      }
+      const { tileId, outline } = piece;
       if (!counts.has(tileId)) counts.set(tileId, { total: 0, cut: 0 });
       const count = counts.get(tileId);
       count.total++;
       if (outline) count.cut++;
     }
-    byId('work-count').textContent = projectSizeText() + ' · ' + pieceCount(project.pieces.length);
+    const summary = [projectSizeText(), pieceCount(project.pieces.length - atTable)];
+    if (atTable) summary.push(t('worktableCount', { count: atTable }));
+    byId('work-count').textContent = summary.join(' · ');
     renderInventory(placementIndex.tileTypes, counts);
   }
 
@@ -767,14 +789,26 @@
     const rulerGutter = 52;
     const fitWidth = Math.max(screenWidth - 2 * rulerGutter, screenWidth / 2);
     const fitHeight = Math.max(screenHeight - 2 * rulerGutter, screenHeight / 2);
+    const table = placementIndex?.worktable;
+    const right = table?.maxX ?? board.width / 2;
+    const workspaceWidth = right + board.width / 2;
+    const workspaceHeight = Math.max(board.height, project.worktable ?? 0);
     const margin = Math.max(board.width, board.height) * .12;
-    const unitsPerPixel = Math.max((board.width + margin) / fitWidth, (board.height + margin) / fitHeight) / zoom;
+    const unitsPerPixel = Math.max((workspaceWidth + margin) / fitWidth, (workspaceHeight + margin) / fitHeight) / zoom;
     const width = screenWidth * unitsPerPixel;
     const height = screenHeight * unitsPerPixel;
     snapDistance = SNAP_PIXELS * unitsPerPixel;
     canvas.setAttribute('viewBox', [
-      viewCenter.x - width / 2, viewCenter.y - height / 2, width, height
+      viewCenter.x + (right - board.width / 2) / 2 - width / 2, viewCenter.y - height / 2, width, height
     ].join(' '));
+    if (layers.worktableLabel) {
+      layers.worktableLabel.textContent = table ? t('worktable') : '';
+      if (table) {
+        layers.worktableLabel.setAttribute('x', (table.minX + table.maxX) / 2);
+        layers.worktableLabel.setAttribute('y', table.minY - 9 * unitsPerPixel);
+        layers.worktableLabel.setAttribute('font-size', Math.min(12 * unitsPerPixel, project.worktable / 6));
+      }
+    }
     const language = document.documentElement.lang;
     if (rulerView?.board !== board || rulerView.unitsPerPixel !== unitsPerPixel || rulerView.language !== language) {
       const anchors = rulerView?.board === board ? rulerView.anchors : Model.boardGuideAnchors(board);
@@ -797,6 +831,7 @@
     renderView();
     byId('undo').disabled = past.length === 0;
     byId('redo').disabled = future.length === 0;
+    worktableButton?.setAttribute('aria-pressed', String(Boolean(placementIndex.worktable)));
   }
 
   function toolAvailable(name) {
@@ -845,18 +880,39 @@
     if (cancelPasteButton) cancelPasteButton.hidden = !pendingPaste;
   }
 
+  function toggleWorktable() {
+    if (gesture) return;
+    const table = placementIndex.worktable;
+    if (table && project.pieces.some(piece => Model.isOnWorktable(table, piece))) {
+      notify('worktableOccupied');
+      return;
+    }
+    const worktable = table ? undefined : Math.max(48, Math.round(Math.min(project.board.width, project.board.height) * .42));
+    commit({ ...project, worktable });
+  }
+
   function changeBoard(changes) {
+    if (gesture) {
+      renderSettings();
+      return;
+    }
     const board = { ...project.board, ...changes };
     if (board.shape === 'circle') board.height = board.width;
     board.radius = Math.min(board.radius, board.width / 2, board.height / 2);
     if (Object.keys(board).every(key => board[key] === project.board[key])) return;
-    if (project.pieces.some(piece => !Model.fitsBoard(board, placementIndex.geometry(piece)))) {
+    const table = placementIndex.worktable;
+    if (project.pieces.some(piece => !Model.isOnWorktable(table, piece) &&
+      !Model.fitsBoard(board, placementIndex.geometry(piece)))) {
       renderSettings();
       notify('boardChangeBlocked');
       return;
     }
+    const nextTable = Model.worktableBounds(board, project.worktable);
+    const offsetX = table ? nextTable.minX - table.minX : 0;
+    const pieces = offsetX ? project.pieces.map(piece => Model.isOnWorktable(table, piece) ?
+      { ...piece, x: piece.x + offsetX } : piece) : project.pieces;
     if (board.width !== project.board.width || board.height !== project.board.height) resetView();
-    commit({ ...project, board });
+    commit({ ...project, board, pieces });
   }
 
   function numericChange(id, oldValue, action) {
@@ -1182,6 +1238,7 @@
       return;
     }
     const start = snappedGeometry(pieceAt(point, tile, action.angle)).piece;
+    const onTable = Model.isOnWorktable(action.index.worktable, start);
     const horizontal = tile.width + project.seam;
     const vertical = tile.height + project.seam;
     const queue = [[0, 0]];
@@ -1190,7 +1247,9 @@
     for (let i = 0; i < queue.length && action.placed.length < action.limit; i++) {
       const [column, row] = queue[i];
       const previousCount = action.placed.length;
-      placeCandidate(action, { x: start.x + column * horizontal, y: start.y + row * vertical }, false);
+      const candidate = { x: start.x + column * horizontal, y: start.y + row * vertical };
+      if (Model.isOnWorktable(action.index.worktable, candidate) !== onTable) continue;
+      placeCandidate(action, candidate, false);
       if (action.placed.length === previousCount) continue;
       for (const [dx, dy] of directions) {
         const neighbor = [column + dx, row + dy];
@@ -1688,8 +1747,9 @@
     if (event && zoom !== nextZoom) {
       const point = surfacePoint(event);
       const ratio = zoom / nextZoom;
-      viewCenter.x = point.x + (viewCenter.x - point.x) * ratio;
-      viewCenter.y = point.y + (viewCenter.y - point.y) * ratio;
+      const { x, y, width, height } = canvas.viewBox.baseVal;
+      viewCenter.x += (point.x - (x + width / 2)) * (1 - ratio);
+      viewCenter.y += (point.y - (y + height / 2)) * (1 - ratio);
     }
     zoom = nextZoom;
     renderView();
@@ -1880,6 +1940,7 @@
   tileDialog.addEventListener('cancel', returnToSelection);
   byId('undo').addEventListener('click', undo);
   byId('redo').addEventListener('click', redo);
+  worktableButton?.addEventListener('click', toggleWorktable);
   copyTilesButton?.addEventListener('click', copySelection);
   pasteTilesButton?.addEventListener('click', () => {
     if (pendingPaste) setTool('select');

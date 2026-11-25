@@ -29,6 +29,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - Use the trash button in the library to remove a tile type. Tiles already placed with that type stay on the board and in the saved file.
 - Click a tile to select it. Drag from an empty spot to select multiple tiles, or Shift-click individual tiles to add them to or remove them from the selection. Drag a selected tile to move the entire selection. Choose **Delete selected** to remove those tiles together. You can also rotate a single selected tile.
 - Choose the scissors (**Split tile**) or press **X**, then drag a straight line all the way across one placed tile. The preview shows both pieces with the current grout width between them. The pieces retain their tile type and can be moved, rotated, or split again. Use Undo to restore the original tile.
+- Select **Worktable** to open a small surface next to the board. Place a tile there or drag one over from the mosaic. After cutting it, drag the pieces you want back onto the mosaic. Worktable pieces are saved with the project and the mosaic inventory counts pieces on the board. Empty the worktable to close it.
 - Use **Copy selected tiles** and **Paste tiles** in the toolbar to duplicate a selection within the current project. Click or tap the board to place the preview. The copies keep their spacing and rotation, and the editor selects them together after placement. Press Esc or choose **Cancel** to leave paste mode.
 - Scroll the mouse wheel to zoom. Use the Pan tool or hold Space while dragging to move the view.
 - With the Eraser, click to remove a single tile or drag to remove several. Undo restores all tiles removed in one drag.
@@ -39,6 +40,8 @@ The browser stores your most recent project locally when its settings allow it. 
 ## Read-only viewer
 
 Open [viewer.html](viewer.html) in Safari, including on iOS 12, and choose **Open project** to select a saved `.mosaic.json` file. On iOS, open the viewer from a web server and pick the file from the Files app. The browser opens the file locally. The viewer shows the board, placed tiles with their grout, and any visible grid, custom guides, and reference images. Use **+** to zoom in, swipe to scroll the enlarged board, and use **Fit to view** to see the whole board again.
+
+The viewer shows the mosaic board. Reopen the project in the editor to access any pieces stored on the worktable.
 
 To open a specific plan automatically, put its JSON file on the same web server as the viewer. For a file named `plan.mosaic.json` in the same folder, open `viewer.html?project=plan.mosaic.json`. Anyone who can access the JSON URL can read the project and its embedded reference images.
 
