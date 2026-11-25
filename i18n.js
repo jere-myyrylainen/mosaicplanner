@@ -157,7 +157,7 @@
     lineHint: ["Vedä viivan alusta loppuun.", "Drag from one end of the line to the other."],
     shapeHint: ["Vedä muodon vastakkaisten kulmien välillä.", "Drag between opposite corners of the shape."],
     fillHint: ["Napsauta tyhjää aluetta, jonka haluat täyttää.", "Click the empty area you want to fill."],
-    splitHint: ["Vedä suora viiva yhden palan poikki reunasta reunaan.", "Drag a straight line all the way across one tile."],
+    splitHint: ["Vedä viiva yhden palan poikki reunasta reunaan. Lähes kohtisuora leikkaus lukittuu 90°:n kulmaan.", "Drag a line all the way across one tile. A near-perpendicular cut snaps to 90° from the starting edge."],
     eraseHint: ["Poista pala napsauttamalla tai poista useita paloja vetämällä.", "Click to erase one tile or drag to erase several."],
     referenceHint: ["Vedä työalueella siirtääksesi apukuvaa. Esc palauttaa valintatyökalun.", "Drag on the canvas to move the reference image. Press Esc to return to the selection tool."],
     guideLineHint: ["Vedä viivaohjuri. Sen päät tarttuvat lähellä oleviin reunapisteisiin.", "Drag a line guide. Its ends snap to nearby points on the board edge."],

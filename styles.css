@@ -176,6 +176,12 @@ select {
 .split-outline { fill: #193e9a19; }
 .split-line { stroke-dasharray: 5 4; }
 .split-line.invalid-split { stroke: #a34032; }
+.split-dimension-line, .split-right-angle { fill: none; stroke: #193e9a; stroke-width: 1.15; vector-effect: non-scaling-stroke; }
+.split-anchor { fill: #193e9a; stroke: var(--paper); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+.split-dimension-label {
+  fill: #193e9a; stroke: var(--paper); stroke-width: 3; stroke-linejoin: round; paint-order: stroke;
+  vector-effect: non-scaling-stroke; font-weight: 650; font-variant-numeric: tabular-nums;
+}
 .selection-marquee {
   fill: #193e9a1f; stroke: #193e9a; stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke;
 }

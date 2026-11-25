@@ -1336,7 +1336,9 @@
       const element = event.target.closest('[data-piece]');
       if (element) erasePiece(gesture, element.dataset.piece);
     } else if (tool === 'split') {
-      gesture = { kind: 'split', start: point };
+      const edge = placementIndex.nearestSplitEdge(point, snapDistance);
+      gesture = { kind: 'split', start: point, edge };
+      if (edge) renderSplitMeasurement(layers.preview, { edge });
     } else if (tool === 'fill') {
       fillAt(point, tile);
       return;
@@ -1509,8 +1511,60 @@
     commit({ ...project, pieces: project.pieces.concat(copies) });
   }
 
-  function previewSplit(current, end) {
-    const { start } = current;
+  function renderSplitMeasurement(layer, { edge, start, end, locked }) {
+    if (!edge) return;
+    const lengths = Model.splitEdgeLengths(edge, project.seam, start, end);
+    if (!lengths) return;
+    const scale = rulerView.unitsPerPixel;
+    const { first, along, length, tx, ty, point } = edge;
+    const at = (distance, offset) => [
+      first.x + distance * tx + offset * ty, first.y + distance * ty - offset * tx
+    ];
+    const pathPoint = (command, distance, offset) => command + at(distance, offset).join(' ');
+    const baseline = 12 * scale;
+    const { before, after } = lengths;
+    const boundary = length - after;
+    const segments = pathPoint('M', 0, baseline) + pathPoint('L', before, baseline) +
+      pathPoint('M', boundary, baseline) + pathPoint('L', length, baseline);
+    const ticks = [...new Set([0, before, boundary, length])].map(distance =>
+      pathPoint('M', distance, 2 * scale) + pathPoint('L', distance, baseline + 3 * scale));
+    layer.append(svgElement('path', { d: segments + ticks.join(''), class: 'split-dimension-line' }));
+
+    const labels = [
+      { length: before, distance: Math.min(before / 2, along - 35 * scale) },
+      { length: after, distance: Math.max(length - after / 2, along + 35 * scale) }
+    ];
+    for (const label of labels) {
+      const [x, y] = at(label.distance, baseline + 10 * scale);
+      const text = svgElement('text', {
+        x, y, 'font-size': 12 * scale, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+        class: 'split-dimension-label'
+      });
+      text.textContent = I18n.number(label.length) + ' mm';
+      layer.append(text);
+    }
+    layer.append(svgElement('circle', {
+      cx: point.x, cy: point.y, r: 2.5 * scale, class: 'split-anchor'
+    }));
+    if (locked) {
+      const size = Math.min(8 * scale, Math.max(before, after) / 2);
+      const side = before > after ? -1 : 1;
+      const d = pathPoint('M', along + size * side, 0) + pathPoint('L', along + size * side, -size) +
+        pathPoint('L', along, -size);
+      layer.append(svgElement('path', { d, class: 'split-right-angle' }));
+    }
+  }
+
+  function previewSplitHover(point) {
+    const edge = placementIndex.nearestSplitEdge(point, snapDistance);
+    layers.preview.replaceChildren();
+    if (edge) renderSplitMeasurement(layers.preview, { edge });
+  }
+
+  function previewSplit(current, pointer) {
+    current.end = pointer;
+    const line = placementIndex.splitLine(current.start, pointer, current.edge);
+    const { start, end } = line;
     let target;
     let fragments;
     let error = 'splitAcrossTile';
@@ -1544,6 +1598,7 @@
       x1: start.x, y1: start.y, x2: end.x, y2: end.y,
       class: fragments ? 'split-line' : 'split-line invalid-split'
     }));
+    renderSplitMeasurement(preview, line);
     layers.preview.replaceChildren(preview);
   }
 
@@ -1626,6 +1681,7 @@
     if (gesture) updateGesture(event);
     else if (pendingPaste && !spacePressed) previewPaste(surfacePoint(event));
     else if (tool === 'draw' && !spacePressed) previewDrawHover(event);
+    else if (tool === 'split' && !spacePressed && event.pointerType !== 'touch') previewSplitHover(surfacePoint(event));
     else if (tool === 'guideLine' && !spacePressed) {
       layers.preview.replaceChildren();
       markGuideAnchor(guideAnchorAt(surfacePoint(event)));
@@ -1755,6 +1811,7 @@
     renderView();
     layers.preview.replaceChildren();
     if (pendingPaste && event && !spacePressed) previewPaste(surfacePoint(event));
+    else if (tool === 'split' && event && !spacePressed) previewSplitHover(surfacePoint(event));
   }
 
   function exportProject() {
@@ -1911,6 +1968,8 @@
     renderLibrary();
     renderSelection();
     renderView();
+    if (gesture?.kind === 'split' && gesture.end) previewSplit(gesture, gesture.end);
+    else if (tool === 'split' && boardHover && !spacePressed) previewSplitHover(surfacePoint(boardHover));
     if (saveStatus) setSaveStatus(saveStatus);
     if (!byId('feedback').hidden) renderFeedback();
   });

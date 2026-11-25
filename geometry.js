@@ -16,6 +16,7 @@
   const CELL_SIZE = 32;
   const MAX_CELLS_PER_QUERY = 64;
   const TAU = 2 * Math.PI;
+  const SPLIT_SNAP_SLOPE = Math.tan(10 * Math.PI / 180);
   const CURVE_SEGMENTS = 64;
   const MAX_OUTLINE_VERTICES = 128;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
@@ -504,17 +505,50 @@
   function polygonLineRange(points, start, end) {
     let entry = -Infinity;
     let exit = Infinity;
+    let entryEdge;
     for (let i = 0; i < points.length; i++) {
       const edgeStart = points[i];
       const edgeEnd = points[(i + 1) % points.length];
       const from = sideOfEdge(edgeStart, edgeEnd, start);
       const to = sideOfEdge(edgeStart, edgeEnd, end);
       if (from === to && from < 0) return;
-      if (to > from) entry = Math.max(entry, from / (from - to));
+      if (to > from) {
+        const crossing = from / (from - to);
+        if (crossing > entry) {
+          entry = crossing;
+          entryEdge = i;
+        }
+      }
       if (to < from) exit = Math.min(exit, from / (from - to));
       if (entry > exit) return;
     }
-    return { entry, exit };
+    return { entry, exit, entryEdge };
+  }
+
+  function splitEdge(points, index, origin) {
+    const first = points[index];
+    const last = points[(index + 1) % points.length];
+    const dx = last.x - first.x;
+    const dy = last.y - first.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= EPSILON) return;
+    const fraction = segmentFraction(origin, first, dx, dy);
+    return {
+      first, length, along: fraction * length, tx: dx / length, ty: dy / length,
+      point: { x: first.x + dx * fraction, y: first.y + dy * fraction }
+    };
+  }
+
+  function splitEdgeLengths(edge, gap, start, end) {
+    let removed = gap / 2;
+    if (start && end) {
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const across = Math.abs(dy * edge.tx - dx * edge.ty);
+      if (across <= EPSILON) return;
+      removed *= Math.hypot(dx, dy) / across;
+    }
+    return { before: Math.max(0, edge.along - removed), after: Math.max(0, edge.length - edge.along - removed) };
   }
 
   function clipOutline(points, normalX, normalY, offset) {
@@ -1104,6 +1138,67 @@
       }
     }
 
+    nearestSplitEdge(point, limit) {
+      const bounds = { minX: point.x, maxX: point.x, minY: point.y, maxY: point.y };
+      let nearest;
+      let best = limit;
+      for (const geometry of this.nearby(bounds, limit)) {
+        const { points, curved, minX, maxX, minY, maxY } = geometry;
+        if (!points || curved) continue;
+        const reach = Math.min(best, (maxX - minX) / 4, (maxY - minY) / 4);
+        for (let i = 0; i < points.length; i++) {
+          const edge = splitEdge(points, i, point);
+          if (!edge) continue;
+          const distance = Math.hypot(point.x - edge.point.x, point.y - edge.point.y);
+          if (distance > reach || distance >= best) continue;
+          nearest = edge;
+          best = distance;
+        }
+      }
+      return nearest;
+    }
+
+    firstSplitEdge(start, end) {
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      let first;
+      let best = 1;
+      for (const piece of this.piecesAlong(start, end)) {
+        const { points, curved } = this.geometry(piece);
+        if (!points || curved) continue;
+        const range = polygonLineRange(points, start, end);
+        if (!range || range.entry < 0 || range.entry >= best || range.exit <= range.entry) continue;
+        const point = { x: start.x + dx * range.entry, y: start.y + dy * range.entry };
+        const edge = splitEdge(points, range.entryEdge, point);
+        if (!edge) continue;
+        best = range.entry;
+        first = edge;
+      }
+      return first;
+    }
+
+    splitLine(start, end, startEdge) {
+      const intoEdge = edge => (end.y - edge.point.y) * edge.tx - (end.x - edge.point.x) * edge.ty;
+      const anchored = startEdge && intoEdge(startEdge) > EPSILON;
+      const edge = anchored ? startEdge : this.firstSplitEdge(start, end);
+      if (!edge) return { start, end };
+
+      const { point, first, length, tx, ty } = edge;
+      const depth = intoEdge(edge);
+      const drift = (end.x - point.x) * tx + (end.y - point.y) * ty;
+      const along = anchored ? edge.along : (start.x - first.x) * tx + (start.y - first.y) * ty;
+      if (along <= EPSILON || along >= length - EPSILON || Math.abs(drift) > depth * SPLIT_SNAP_SLOPE) {
+        return { start: anchored ? point : start, end, edge };
+      }
+      const pivot = { x: first.x + along * tx, y: first.y + along * ty };
+      const from = Math.min(0, (start.y - point.y) * tx - (start.x - point.x) * ty);
+      return {
+        start: { x: pivot.x - from * ty, y: pivot.y + from * tx },
+        end: { x: pivot.x - depth * ty, y: pivot.y + depth * tx },
+        edge: { ...edge, point: pivot, along }, locked: true
+      };
+    }
+
     *piecesWithin(bounds) {
       for (const geometry of this.nearby(bounds)) {
         if (geometry.minX >= bounds.minX && geometry.maxX <= bounds.maxX &&
@@ -1444,7 +1539,7 @@
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
     fitsBoard, gridOrigin, guideFromDrag, isOnWorktable, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, sampleOutline, sampleSegment, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    referenceWidthLimit, sampleOutline, sampleSegment, splitEdgeLengths, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions, worktableBounds
   };
 
