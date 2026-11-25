@@ -11,6 +11,7 @@
 - The worktable fills its own panel beside the tile library, or directly below the canvas on narrow screens. Keep its width fixed in millimetres and extend the editing area vertically to fill the panel at 100% zoom. Move its pieces by the same offset as the table when the board dimensions change. Fit and zoom each canvas independently.
 - Clip grout to each piece's own surface. The mosaic board remains the clip for reference images.
 - Preserve the SVG layer order from board to reference images, grid, grout, tile faces, and custom guides. Keep reference images and grout clipped to the board. Editor previews and selection outlines sit above the shared layers.
+- Use the same editor theme color for the bare board and worktable. Keep the grid, guides, and editing marks visible in light and dark themes. Tile and grout colors come from the project.
 - Keep grout rendering and placement spacing aligned. Each tile contributes half the joint width outside its face. A zero width hides the grout layer's contents. Changing width redraws grout and affects later placements without repositioning existing tiles.
 - Keep both split pieces touching along the cut. Use the project grout width when placing a piece at a new position.
 - Preserve the default grout color when opening files saved before `seamColor` was added.

@@ -1933,7 +1933,7 @@
     } else if (tool === 'guideErase') {
       const nearest = Model.nearestGuide(project.guides, surfacePoint(event), snapDistance());
       layers.preview.replaceChildren();
-      if (nearest) layers.preview.append(guideShape(project.guides[nearest.index], { stroke: '#a34032' }));
+      if (nearest) layers.preview.append(guideShape(project.guides[nearest.index], { class: 'board-guide-erase' }));
     }
   }
 

@@ -40,7 +40,7 @@
   function guideShape(guide, attributes) {
     const { x, y } = guide;
     const props = {
-      fill: 'none', stroke: '#345794', 'stroke-width': 1.5, 'stroke-dasharray': '5 4',
+      class: 'board-guide', fill: 'none', stroke: '#345794', 'stroke-width': 1.5, 'stroke-dasharray': '5 4',
       'vector-effect': 'non-scaling-stroke', ...attributes
     };
     if (guide.shape === 'line') return svgElement('line', { x1: x, y1: y, x2: guide.endX, y2: guide.endY, ...props });
