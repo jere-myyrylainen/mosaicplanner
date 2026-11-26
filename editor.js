@@ -1649,10 +1649,6 @@
       gesture = { kind: 'erase', previous: point, erased: new Set() };
       const element = event.target.closest('[data-piece]');
       if (element) erasePiece(gesture, element.dataset.piece);
-    } else if (tool === 'split') {
-      const startTarget = placementIndex.nearestSplitStart(point, snapDistance(), piece => belongsToView(piece, view));
-      gesture = { kind: 'split', start: point, startTarget };
-      renderSplitStart(startTarget);
     } else if (tool === 'fill') {
       fillAt(point, tile);
       return;
@@ -1672,7 +1668,7 @@
         finishDrawing(current, point);
       } else {
         pendingDrawing = startDrawing(view, point, tile);
-        previewDrawing(pendingDrawing, point);
+        if (pendingDrawing.kind !== 'split') previewDrawing(pendingDrawing, point);
       }
       event.preventDefault();
       return;
@@ -1696,6 +1692,11 @@
   }
 
   function startDrawing(view, point, tile) {
+    if (tool === 'split') {
+      const startTarget = placementIndex.nearestSplitStart(point, snapDistance(), piece => belongsToView(piece, view));
+      renderSplitStart(startTarget);
+      return { kind: 'split', view, start: point, startTarget };
+    }
     const shape = guideTools.get(tool);
     if (shape) {
       const anchor = shape === 'line' ? guideAnchorAt(point) : undefined;
@@ -1736,6 +1737,10 @@
   }
 
   function previewDrawing(current, point) {
+    if (current.kind === 'split') {
+      previewSplit(current, point);
+      return;
+    }
     if (current.kind === 'guide') {
       const { anchor, guide } = guideDrawing(current, point);
       layers.preview.replaceChildren();
@@ -1749,6 +1754,10 @@
   }
 
   function finishDrawing(current, point) {
+    if (current.kind === 'split') {
+      finishSplit(splitAt(current, point));
+      return;
+    }
     if (current.kind === 'guide') {
       const { guide } = guideDrawing(current, point);
       if (guide) commit({
@@ -1979,11 +1988,10 @@
     renderSplitStart(placementIndex.nearestSplitStart(point, snapDistance(), piece => belongsToView(piece, previewView)));
   }
 
-  function previewSplit(current, pointer) {
-    current.end = pointer;
-    const acceptsPiece = piece => belongsToView(piece, current.view);
-    const line = placementIndex.splitLine(current.start, pointer, current.startTarget, snapDistance(), acceptsPiece);
-    const { start, end, endAnchor } = line;
+  function splitAt({ start: origin, startTarget, view }, pointer) {
+    const acceptsPiece = piece => belongsToView(piece, view);
+    const line = placementIndex.splitLine(origin, pointer, startTarget, snapDistance(), acceptsPiece);
+    const { start, end } = line;
     let target;
     let fragments;
     let error = 'splitAcrossTile';
@@ -2005,10 +2013,12 @@
       fragments = undefined;
       error = 'tooManyTiles';
     }
-    current.target = target;
-    current.fragments = fragments;
-    current.error = error;
+    return { line, target, fragments, error };
+  }
 
+  function previewSplit(current, pointer) {
+    const { line, target, fragments } = splitAt(current, pointer);
+    const { start, end, endAnchor } = line;
     const preview = document.createDocumentFragment();
     if (fragments) {
       const tile = placementIndex.tileTypes.get(target.tileId);
@@ -2085,8 +2095,6 @@
         if (belongsToView(piece, current.view)) erasePiece(current, piece.id);
       }
       current.previous = point;
-    } else if (current.kind === 'split') {
-      previewSplit(current, point);
     } else if (current.kind === 'draw') {
       const { action, previous } = current;
       if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1e-7) return;
@@ -2098,7 +2106,7 @@
       previewDrawPlacement(point, action);
     } else {
       current.lastPoint = point;
-      previewDrawing(current, point);
+      if (event.type !== 'pointerup') previewDrawing(current, point);
     }
   }
 
@@ -2170,10 +2178,6 @@
       return;
     }
     if (event.type !== 'pointerup' || current.kind === 'pan') return;
-    if (current.kind === 'split') {
-      finishSplit(current);
-      return;
-    }
     if (current.kind === 'draw') {
       if (current.action.placed.length) finishPlacement(current.action);
       else {
@@ -2246,9 +2250,12 @@
     renderView();
     if (view === previewView) layers.preview.replaceChildren();
     if (event && !spacePressed && (pendingPaste || tool === 'split')) {
+      if (pendingDrawing && pendingDrawing.view !== view) return;
       setPreviewView(view);
-      if (pendingPaste) previewPaste(surfacePoint(event));
-      else previewSplitHover(surfacePoint(event));
+      const point = surfacePoint(event, view);
+      if (pendingDrawing) previewSplit(pendingDrawing, point);
+      else if (pendingPaste) previewPaste(point);
+      else previewSplitHover(point);
     }
   }
 
@@ -2405,10 +2412,13 @@
     renderLibrary();
     renderSelection();
     renderView();
-    if (gesture?.kind === 'split' && gesture.end) previewSplit(gesture, gesture.end);
-    else if (tool === 'split' && pointerHover && !spacePressed) {
+    if (gesture?.kind === 'split' && gesture.lastPoint) previewSplit(gesture, gesture.lastPoint);
+    else if (tool === 'split' && pointerHover && !spacePressed &&
+        (!pendingDrawing || pendingDrawing.view === pointerHover.view)) {
       setPreviewView(pointerHover.view);
-      previewSplitHover(surfacePoint(pointerHover));
+      const point = surfacePoint(pointerHover);
+      if (pendingDrawing) previewSplit(pendingDrawing, point);
+      else previewSplitHover(point);
     }
     if (saveStatus) setSaveStatus(saveStatus);
     if (!byId('feedback').hidden) renderFeedback();
