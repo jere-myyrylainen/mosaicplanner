@@ -239,12 +239,13 @@
           <p id="empty-library" class="empty-library" hidden data-text="emptyLibrary"></p>
         </div>
         <section id="library-tile-details" class="library-tile-details" hidden data-aria-label="selectedTileType"></section>
-        <section class="seam-settings" aria-labelledby="seam-heading">
-          <h2 id="seam-heading" data-text="grout"></h2>
+        <section id="tile-grout-settings" class="seam-settings" aria-labelledby="tile-grout-heading" hidden>
+          <h3 id="tile-grout-heading"></h3>
           <div class="fields-row">
-            <label class="field"><span data-text="seamWidth"></span><span class="number-field"><input type="number" id="seam-width" min="0" max="100" step="0.1"><span>mm</span></span></label>
-            <label class="field"><span data-text="seamColor"></span><input type="color" id="seam-color"></label>
+            <label class="field"><span data-text="seamWidth"></span><span class="number-field"><input type="number" id="tile-seam-width" min="0" max="100" step="any"><span>mm</span></span></label>
+            <label class="field"><span data-text="seamColor"></span><input type="color" id="tile-seam-color"></label>
           </div>
+          <button type="button" id="reset-tile-seam" class="button quiet" data-text="resetTileSeam" hidden></button>
         </section>
       </section>
       <section class="panel reference-panel" id="reference-panel" data-aria-label="references" hidden>
@@ -318,6 +319,13 @@
         <label class="field" id="board-height-field"><span data-text="height"></span><span class="number-field"><input type="number" id="board-height" min="1" max="10000" step="any" required><span>mm</span></span></label>
       </div>
       <label class="field" id="board-radius-field" hidden><span data-text="cornerRadius"></span><span class="number-field"><input type="number" id="board-radius" min="0" max="5000" step="any" required><span>mm</span></span></label>
+      <fieldset class="board-grout-settings">
+        <legend data-text="defaultGrout"></legend>
+        <div class="fields-row">
+          <label class="field"><span data-text="seamWidth"></span><span class="number-field"><input type="number" id="seam-width" min="0" max="100" step="any" required><span>mm</span></span></label>
+          <label class="field"><span data-text="seamColor"></span><input type="color" id="seam-color"></label>
+        </div>
+      </fieldset>
       <p class="dialog-error" id="board-error" role="alert" hidden data-text="boardChangeBlocked"></p>
       <div class="dialog-actions">
         <button type="button" class="button quiet" data-close-dialog data-text="cancel"></button>

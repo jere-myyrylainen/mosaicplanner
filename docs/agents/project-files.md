@@ -5,7 +5,8 @@
 ## Preserve these behaviors
 
 - Keep the `.mosaic.json` file self-contained. When adding an optional field, provide a default for older files and validate it before using it in either entry point. Use the same reader for editor import, autosave restoration, and the viewer.
-- Preserve existing piece locations on import. The reader validates fit, references to tile types, and physical overlap with a zero grout gap so saved projects remain readable after a grout gap increase.
+- Preserve existing piece locations on import. The reader validates fit, references to tile types, and physical overlap without grout clearance so saved projects remain readable after a grout width increase.
+- Keep the project defaults in top-level `seam` and `seamColor`. Optional fields of the same names on a piece override each default independently. A library type may store the same fields for new pieces. Copy those fields into a piece when placing it. Files without overrides inherit the project defaults.
 - Save diamonds, ovals, and leaves with the `diamond`, `oval`, and `leaf` shape values. Their width and height are the full dimensions in millimetres before rotation.
 - A split piece keeps its original `tileId` and stores an optional convex `outline` in local millimetres before rotation. Validate the ordered vertices and use them for fit and overlap checks. Pieces without an outline use the library shape and dimensions.
 - The optional numeric `worktable` field records the table width in millimetres. The optional `worktableHeight` defaults to the width for older files. Both surfaces use the same piece list and coordinate space. Derive the table bounds from the board dimensions and validate that each piece fits on its surface. Files without a worktable open with only the mosaic board.

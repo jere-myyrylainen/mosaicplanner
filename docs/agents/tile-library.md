@@ -12,7 +12,7 @@
 - The mosaic inventory counts pieces on the main board. Show the number of worktable pieces separately in the editor's status bar.
 - Show the current mosaic count next to the inventory icon. Give the disclosure a localized accessible name and keep its per-type breakdown in the panel.
 - Build library filters from active types. A color can belong to multiple families. Tag filtering requires all selected tags and uses normalized keys while retaining their display labels. Name sorting uses the active locale. The browser stores the selected sort order separately from the project.
-- In the compact list, show a swatch, name, tag pills, and dimensions at the right end of each row. Use a shared swatch scale across the library and enlarge exceptionally small silhouettes to keep them legible. Show the active drawing tile's larger preview, full dimensions, tags, and library actions below the list, including when filters hide its row. Keep the expanded grid's actions on the cards.
+- In the compact list, show a swatch, name, tag pills, and dimensions at the right end of each row. Use a shared swatch scale across the library and enlarge exceptionally small silhouettes to keep them legible. Show the active drawing tile's larger preview, full dimensions, tags, and library actions below the list, including when filters hide its row. Keep the expanded grid’s actions on the cards. Below the library, set the grout for new pieces of the active type or for the single placed piece currently selected. The larger preview uses the effective grout as its edge stroke. The reset action restores the project defaults for the current target.
 
 ## Check changes
 

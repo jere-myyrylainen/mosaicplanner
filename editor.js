@@ -4,7 +4,7 @@
   const Model = window.MosaicGeometry;
   const Storage = window.MosaicStorage;
   const I18n = window.MosaicI18n;
-  const { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderWorktable, renderBoardRulers, paintGridPosition, paintReference } = window.MosaicBoard;
+  const { svgElement, pieceShape, guideShape, groutStroke, renderGrout, renderBoard, renderWorktable, renderBoardRulers, paintGridPosition, paintReference } = window.MosaicBoard;
   const t = I18n.text;
   const LIBRARY_ORDER_KEY = 'mosaic-planner.library-order';
   const tileTools = new Set(['draw', 'line', 'shape', 'fill']);
@@ -62,7 +62,10 @@
   const drawRotation = byId('draw-rotation');
   const drawAngleInput = byId('draw-angle');
   const selectedAngleInput = byId('selected-angle');
+  const seamWidthInput = byId('seam-width');
   const seamColorInput = byId('seam-color');
+  const tileSeamWidthInput = byId('tile-seam-width');
+  const tileSeamColorInput = byId('tile-seam-color');
   const expandLibrary = byId('expand-library');
   const copyTilesButton = byId('copy-tiles');
   const pasteTilesButton = byId('paste-tiles');
@@ -161,8 +164,8 @@
     return height > storedHeight ? { ...next, worktableHeight: Math.min(10000, height) } : next;
   }
 
-  function editingIndex(snapshot = project, excludedIds) {
-    const index = new Model.PlacementIndex(snapshot, excludedIds);
+  function editingIndex(snapshot = project, excludedIds, options) {
+    const index = new Model.PlacementIndex(snapshot, excludedIds, options);
     index.worktable = placementIndex.worktable;
     return index;
   }
@@ -522,10 +525,8 @@
   }
 
   function renderSettings() {
-    const { grid, name, seam, seamColor } = project;
+    const { grid, name } = project;
     byId('project-name').value = name;
-    byId('seam-width').value = seam;
-    if (seamColorInput && seamColor) seamColorInput.value = seamColor;
     renderGridSettings(grid);
   }
 
@@ -702,7 +703,7 @@
     return actions;
   }
 
-  function renderLibraryTileDetails(tile) {
+  function renderLibraryTileDetails(tile, piece) {
     const details = byId('library-tile-details');
     const focusedAction = details.contains(document.activeElement) && document.activeElement.dataset.tileAction;
     details.hidden = !tile;
@@ -710,6 +711,8 @@
       details.replaceChildren();
       return;
     }
+    details.dataset.ariaLabel = piece ? 'selectedTile' : 'selectedTileType';
+    details.setAttribute('aria-label', t(details.dataset.ariaLabel));
     const preview = document.createElement('div');
     preview.className = 'library-tile-preview';
     const caption = document.createElement('div');
@@ -718,12 +721,57 @@
     const metadata = document.createElement('p');
     metadata.textContent = t(tile.shape) + ' · ' + tileSizeText(tile);
     caption.append(name, metadata);
-    preview.append(tileSwatch(tile), caption);
+    const centered = piece ? { ...piece, x: 0, y: 0 } : pieceAt({ x: 0, y: 0 }, tile, 0);
+    const { minX, minY, maxX, maxY } = Model.pieceGeometry(tile, centered);
+    const stroke = groutStroke(centered, project);
+    const size = (Math.max(maxX - minX, maxY - minY) + stroke['stroke-width']) * 1.1;
+    const swatch = svgElement('svg', {
+      class: 'tile-swatch', 'aria-hidden': 'true',
+      viewBox: [(minX + maxX - size) / 2, (minY + maxY - size) / 2, size, size].join(' ')
+    });
+    swatch.append(pieceShape(centered, tile, { class: 'tile-preview-face', fill: tile.color, ...stroke }));
+    preview.append(swatch, caption);
     details.replaceChildren(preview);
     if (tile.tags?.length) details.append(tileTagPills(tile.tags));
-    const actions = tileLibraryActions(tile);
-    details.append(actions);
-    if (focusedAction) actions.querySelector('[data-tile-action="' + focusedAction + '"]')?.focus({ preventScroll: true });
+    if (!tile.archived) {
+      const actions = tileLibraryActions(tile);
+      details.append(actions);
+      if (focusedAction) actions.querySelector('[data-tile-action="' + focusedAction + '"]')?.focus({ preventScroll: true });
+    }
+  }
+
+  function groutTarget(pieces = currentSelection()) {
+    if (pendingPaste || pieces.length > 1) return;
+    return pieces[0] || placementIndex.tileTypes.get(activeTileId);
+  }
+
+  function renderTileSettings(pieces = currentSelection()) {
+    const target = groutTarget(pieces);
+    const piece = target && pieces[0];
+    const tile = placementIndex.tileTypes.get(piece ? piece.tileId : activeTileId);
+    renderLibraryTileDetails(editor.classList.contains('library-expanded') ? undefined : tile, piece);
+
+    byId('tile-grout-settings').hidden = !target;
+    if (!target) return;
+    byId('tile-grout-heading').textContent = t(piece ? 'selectedTileGrout' : 'drawingTileGrout');
+    const stroke = groutStroke(target, project);
+    tileSeamWidthInput.defaultValue = tileSeamWidthInput.value = stroke['stroke-width'];
+    tileSeamColorInput.value = stroke.stroke;
+    byId('reset-tile-seam').hidden = target.seam === undefined && target.seamColor === undefined;
+  }
+
+  function changeTileSeam(changes) {
+    const target = groutTarget();
+    if (!target || gesture) {
+      renderTileSettings();
+      return;
+    }
+    const { seam, seamColor, ...fields } = target;
+    const next = { ...fields, ...Model.seamOverrides({ seam, seamColor, ...changes }) };
+    if (seam === next.seam && seamColor === next.seamColor) return;
+    const collection = target.tileId === undefined ? 'tiles' : 'pieces';
+    const entries = project[collection].map(entry => entry === target ? next : entry);
+    commit({ ...project, [collection]: entries });
   }
 
   function renderLibrary() {
@@ -749,6 +797,7 @@
         if (tile.id !== activeTileId) cancelPendingDrawing();
         activeTileId = tile.id;
         if (tool === 'select' || tool === 'pan' || tool === 'erase') setTool('draw');
+        else renderTileSettings();
         renderLibrary();
       });
       if (tile.id === focusedTileId) focusTarget = choice;
@@ -796,7 +845,6 @@
     const hiddenTile = !visibleTiles.some(tile => tile.id === activeTileId) && selectedTile;
     byId('hidden-drawing-tile').hidden = !hiddenTile;
     if (hiddenTile) byId('hidden-drawing-tile').textContent = t('hiddenDrawingTile', { name: hiddenTile.name });
-    renderLibraryTileDetails(expanded ? undefined : selectedTile);
     if (focusTarget) focusTarget.focus({ preventScroll: true });
   }
 
@@ -811,6 +859,7 @@
     expandLibrary.setAttribute('aria-label', t(label));
     expandLibrary.querySelector('use').setAttribute('href', expanded ? '#i-collapse' : '#i-expand');
     renderLibrary();
+    renderTileSettings();
     drawHover = undefined;
     layers.preview.replaceChildren();
     renderView();
@@ -878,6 +927,7 @@
     const pieces = currentSelection();
     paintSelection(pieces);
     renderClipboardControls();
+    renderTileSettings(pieces);
     const showPanel = pieces.length > 0 && !pendingPaste;
     byId('selected-panel').hidden = !showPanel;
     if (!showPanel) return;
@@ -1074,11 +1124,12 @@
     worktableButton.setAttribute('aria-label', t(label));
   }
 
-  function changeBoard(board) {
+  function changeBoard(board, seam, seamColor) {
     if (gesture) return false;
-    if (Object.keys(board).every(key => board[key] === project.board[key])) return true;
+    const boardChanged = Object.keys(board).some(key => board[key] !== project.board[key]);
+    if (!boardChanged && seam === project.seam && seamColor === project.seamColor) return true;
     const table = placementIndex.worktable;
-    if (project.pieces.some(piece => !Model.isOnWorktable(table, piece) &&
+    if (boardChanged && project.pieces.some(piece => !Model.isOnWorktable(table, piece) &&
       !Model.fitsBoard(board, placementIndex.geometry(piece)))) {
       return false;
     }
@@ -1087,7 +1138,7 @@
     const pieces = offsetX ? project.pieces.map(piece => Model.isOnWorktable(table, piece) ?
       { ...piece, x: piece.x + offsetX } : piece) : project.pieces;
     if (board.width !== project.board.width || board.height !== project.board.height) resetView();
-    commit({ ...project, board, pieces });
+    commit({ ...project, board: boardChanged ? board : project.board, pieces, seam, seamColor });
     return true;
   }
 
@@ -1095,7 +1146,9 @@
     if (gesture) return;
     closeDisclosures(true);
     creatingProject = create;
-    const { board } = create ? Model.blankProject([]) : project;
+    const { board, seam, seamColor } = create ? Model.blankProject([]) : project;
+    seamWidthInput.value = seam;
+    seamColorInput.value = seamColor;
     byId('board-dialog-title').textContent = t(create ? 'startProject' : 'boardSettings');
     byId('save-board').textContent = t(create ? 'createProject' : 'applySettings');
     const showDescription = create && Boolean(project.pieces.length || project.references.length || project.guides.length);
@@ -1120,11 +1173,13 @@
     const height = shape === 'circle' ? width : byId('board-height').valueAsNumber;
     const radius = boardRadiusInput.disabled ? Number(boardRadiusInput.defaultValue) : boardRadiusInput.valueAsNumber;
     const board = { shape, width, height, radius: Math.min(radius, width / 2, height / 2) };
+    const seam = seamWidthInput.valueAsNumber;
+    const seamColor = seamColorInput.value;
     if (creatingProject) {
       const name = byId('new-project-name').value.trim() || t('untitledProject');
       boardDialog.close();
-      newProject(board, name);
-    } else if (changeBoard(board)) {
+      newProject({ board, seam, seamColor }, name);
+    } else if (changeBoard(board, seam, seamColor)) {
       boardDialog.close();
     } else {
       byId('board-error').hidden = false;
@@ -1154,7 +1209,7 @@
   }
 
   function bindSettings() {
-    for (const input of [byId('project-name'), byId('seam-width')]) {
+    for (const input of [byId('project-name'), tileSeamWidthInput]) {
       input.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
           event.preventDefault();
@@ -1171,21 +1226,12 @@
     boardShapeInput.addEventListener('change', updateBoardShape);
     byId('board-form').addEventListener('input', () => { byId('board-error').hidden = true; });
     byId('board-form').addEventListener('submit', submitBoardSettings);
-    numericChange('seam-width', () => project.seam, seam => {
-      if (gesture) {
-        byId('seam-width').value = project.seam;
-        return;
-      }
-      commit({ ...project, seam });
-      if (project.pieces.length) notify('seamChanged');
-    });
-    seamColorInput?.addEventListener('change', () => {
-      if (gesture) {
-        seamColorInput.value = project.seamColor;
-        return;
-      }
-      const seamColor = seamColorInput.value;
-      if (seamColor !== project.seamColor) commit({ ...project, seamColor });
+    numericChange('tile-seam-width', () => Number(tileSeamWidthInput.defaultValue),
+      seam => changeTileSeam({ seam }));
+    tileSeamColorInput.addEventListener('change', () => changeTileSeam({ seamColor: tileSeamColorInput.value }));
+    byId('reset-tile-seam').addEventListener('click', () => {
+      changeTileSeam({ seam: undefined, seamColor: undefined });
+      tileSeamWidthInput.focus({ preventScroll: true });
     });
     for (const key of ['offsetX', 'offsetY']) {
       const input = byId(gridNumbers[key]);
@@ -1355,7 +1401,10 @@
       tagsInput.focus();
       return;
     }
-    const tile = { id: editing ? source.id : nextId('tile'), name, shape, color, width, height, ...(tags.length ? { tags } : {}) };
+    const tile = {
+      id: editing ? source.id : nextId('tile'), name, shape, color, width, height,
+      ...Model.seamOverrides(original), ...(tags.length ? { tags } : {})
+    };
     const tiles = editing ? project.tiles.map(old => old.id === tile.id ? tile : old) : [...project.tiles, tile];
 
     if (previous && (previous.shape !== shape || previous.width !== width || previous.height !== height)) {
@@ -1429,7 +1478,7 @@
   }
 
   function pieceAt(center, tile, angle) {
-    return { tileId: tile.id, x: center.x, y: center.y, angle };
+    return { tileId: tile.id, x: center.x, y: center.y, angle, ...Model.seamOverrides(tile) };
   }
 
   function placeCandidate(action, point, useSnapping) {
@@ -1459,6 +1508,10 @@
     if (pieces.length >= action.limit) notify(pieces.length === 1 ? 'addedOneTile' : 'addedManyTiles', { count: pieces.length });
   }
 
+  function placementPreview(piece, tile) {
+    return pieceShape(piece, tile, { class: 'preview-piece', fill: tile.color, ...groutStroke(piece, project) });
+  }
+
   function previewPieces(pieces, tile, { path, blocked } = {}) {
     const fragment = document.createDocumentFragment();
     if (path && path.length > 1) {
@@ -1467,7 +1520,7 @@
       }));
     }
     for (const piece of pieces.slice(0, 350)) {
-      fragment.append(pieceShape(piece, tile, { class: 'preview-piece piece-face', fill: tile.color }));
+      fragment.append(placementPreview(piece, tile));
     }
     if (blocked) fragment.append(pieceShape(blocked, tile, { class: 'blocked-preview' }));
     layers.preview.replaceChildren(fragment);
@@ -1502,8 +1555,9 @@
       notify('fillStartBlocked');
       return;
     }
-    const horizontal = tile.width + project.seam;
-    const vertical = tile.height + project.seam;
+    const seam = Model.pieceSeam(tile, project);
+    const horizontal = tile.width + seam;
+    const vertical = tile.height + seam;
     const queue = [[0, 0]];
     const seen = new Set(['0/0']);
     const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
@@ -1659,12 +1713,13 @@
   function drawingGuide(current, point) {
     const { start, tile } = current;
     const end = snappedGeometry(pieceAt(point, tile, 0)).piece;
+    const seam = Model.pieceSeam(start, project);
     if (current.kind === 'line') {
-      const spacing = Model.lineSpacing(tile, project.seam, start, end);
+      const spacing = Model.lineSpacing(tile, seam, start, end);
       return { path: [start, end], points: Model.sampleSegment(start, end, spacing).points };
     }
     const path = Model.outlinePath(outlineShape, start, end);
-    return { path, points: Model.sampleOutline(tile, project.seam, path) };
+    return { path, points: Model.sampleOutline(tile, seam, path) };
   }
 
   function pathPlacement(current, point, limit) {
@@ -1782,7 +1837,7 @@
 
   function preparePaste() {
     // Preserve the copied spacing. Only a physical overlap inside the group invalidates it.
-    const index = editingIndex({ ...project, seam: 0, pieces: [] });
+    const index = editingIndex({ ...project, pieces: [] }, undefined, { ignoreSeams: true });
     const preview = svgElement('g', { class: 'paste-preview' });
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const piece of copiedPieces) {
@@ -1795,7 +1850,7 @@
       minY = Math.min(minY, geometry.minY);
       maxX = Math.max(maxX, geometry.maxX);
       maxY = Math.max(maxY, geometry.maxY);
-      preview.append(pieceShape(piece, tile, { class: 'piece-face', fill: tile.color }));
+      preview.append(placementPreview(piece, tile));
     }
     const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
     const distance = piece => (piece.x - center.x) ** 2 + (piece.y - center.y) ** 2;
@@ -2019,7 +2074,7 @@
     } else if (current.kind === 'draw') {
       const { action, previous } = current;
       if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1e-7) return;
-      const spacing = Model.lineSpacing(action.tile, project.seam, previous, point, action.angle);
+      const spacing = Model.lineSpacing(action.tile, Model.pieceSeam(action.tile, project), previous, point, action.angle);
       const sample = Model.sampleSegment(previous, point, spacing, spacing * current.phase);
       for (const center of sample.points) placeCandidate(action, center, true);
       current.previous = point;
@@ -2237,7 +2292,7 @@
     notify('projectOpened');
   }
 
-  function newProject(board, name) {
+  function newProject(settings, name) {
     if (gesture) return;
     projectGeneration++;
     copiedPieces = [];
@@ -2245,7 +2300,7 @@
     clearLibraryFilters();
     resetView();
     const empty = Model.blankProject(project.tiles.filter(tile => !tile.archived), name);
-    commit({ ...empty, board });
+    commit({ ...empty, ...settings });
     setTool('draw');
     showDockPanel('tiles');
     byId('project-name').focus();
