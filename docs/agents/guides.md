@@ -16,7 +16,7 @@ The guide controls live in [index.html](../../index.html) and the gestures in [e
 - Convert the eight-CSS-pixel tolerance into board units when the editor view changes. Allow two nearby edges to combine diagonally within square root of two times the usual tolerance. When pointing at a visible guide crossing, use the tile's size to keep grout-offset candidates local. Prefer the side of each line the pointer is on and try other sides when those positions are blocked.
 - A line guide can snap either endpoint to a nearby board-edge anchor within the screen-pixel tolerance. Keep this independent of tile snapping. A square starts at a corner and a circle starts at its center, using raw pointer coordinates. Use `guideFromDrag` and `guideShape` to keep the preview and committed outline consistent.
 - Derive anchors from the current board with `boardGuideAnchors`. Step by 10 mm from the bounding box's left or top and include the full span. Project each mark to both corresponding sides of the actual outline, including arcs on rounded and circular boards. Keep anchors out of the project JSON. The saved line contains the resulting endpoint coordinates.
-- Commit a guide on pointer release and discard cancelled and zero-size gestures. Guide erasing targets the nearest custom outline and uses the same action history as drawing.
+- With a mouse, start a guide on the first press, preview on pointer movement, and commit on the second press. Escape cancels the preview and keeps the tool active. On touchscreens and with pens, commit on drag release. Discard canceled and zero-size drawings. Guide erasing targets the nearest custom outline and uses the same action history as drawing.
 
 ## Check changes
 
@@ -28,6 +28,6 @@ The guide controls live in [index.html](../../index.html) and the gestures in [e
 - Verify all six pairings of the three snap sources. Include diagonal lines, corners of a square guide, circular guides, and a crossing that is blocked or outside the snap tolerance.
 - Aim directly at a crossing with a tile wider than the snap tolerance, then approach the same crossing with both tile edges just inside their individual snap distances.
 - Check the gap between the tile face and the guide for rectangles, rotated polygons, and circles. Include zero and nonzero grout widths, two tiles on opposite sides of a guide, and the inside and outside of a circular guide.
-- Draw and remove all three guide shapes. Verify undo and redo, cancellation, independent visibility, and snapping with each guide source hidden.
+- Draw and remove all three guide shapes. Verify that moving with the mouse button released updates the preview, the second press commits, and Escape clears the preview with the tool still active. Check undo and redo, independent visibility, and snapping with each guide source hidden.
 - Draw a line between edge anchors with tile snapping off. Check both endpoints at two zoom levels, and repeat on a circle and a rounded rectangle. Include a board dimension with a partial 10 mm interval at the far end.
 - Save and reopen the project in the editor and viewer. Check the guide geometry and visibility in both.

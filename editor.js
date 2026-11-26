@@ -1638,11 +1638,6 @@
       gesture = { kind: 'reference', origin: point, reference: selectedReference() };
     } else if (tool === 'moveGrid') {
       gesture = { kind: 'moveGrid', origin: point, grid: project.grid };
-    } else if (guideTools.has(tool)) {
-      const shape = guideTools.get(tool);
-      const anchor = shape === 'line' ? guideAnchorAt(point) : undefined;
-      gesture = { kind: 'guide', start: anchor || point, anchor, shape };
-      markGuideAnchor(anchor);
     } else if (tool === 'guideErase') {
       const nearest = Model.nearestGuide(project.guides, point, snapDistance());
       if (nearest) {
@@ -1674,16 +1669,17 @@
       if (pendingDrawing) {
         const current = pendingDrawing;
         pendingDrawing = undefined;
-        finishPathDrawing(current, point);
+        finishDrawing(current, point);
       } else {
-        pendingDrawing = startPathDrawing(view, point, tile);
-        previewPathDrawing(pendingDrawing, point);
+        pendingDrawing = startDrawing(view, point, tile);
+        previewDrawing(pendingDrawing, point);
       }
       event.preventDefault();
       return;
     } else {
       cancelPendingDrawing();
-      gesture = startPathDrawing(view, point, tile);
+      gesture = startDrawing(view, point, tile);
+      if (gesture.kind === 'guide') markGuideAnchor(gesture.anchor);
     }
     gesture.view = view;
     gesture.screenX = event.clientX;
@@ -1699,7 +1695,12 @@
     markPiece(id, 'erased-piece', true);
   }
 
-  function startPathDrawing(view, point, tile) {
+  function startDrawing(view, point, tile) {
+    const shape = guideTools.get(tool);
+    if (shape) {
+      const anchor = shape === 'line' ? guideAnchorAt(point) : undefined;
+      return { kind: 'guide', view, start: anchor || point, anchor, shape };
+    }
     return { kind: tool, view, start: snappedGeometry(pieceAt(point, tile, 0)).piece, tile };
   }
 
@@ -1729,12 +1730,34 @@
     return { path, action };
   }
 
-  function previewPathDrawing(current, point) {
+  function guideDrawing({ shape, start }, point) {
+    const anchor = shape === 'line' ? guideAnchorAt(point) : undefined;
+    return { anchor, guide: Model.guideFromDrag(shape, start, anchor || point) };
+  }
+
+  function previewDrawing(current, point) {
+    if (current.kind === 'guide') {
+      const { anchor, guide } = guideDrawing(current, point);
+      layers.preview.replaceChildren();
+      if (guide) layers.preview.append(guideShape(guide, { 'stroke-opacity': .65 }));
+      markGuideAnchor(current.anchor);
+      if (anchor !== current.anchor) markGuideAnchor(anchor);
+      return;
+    }
     const { path, action } = pathPlacement(current, point, 350);
     previewPieces(action.placed, current.tile, { path });
   }
 
-  function finishPathDrawing(current, point) {
+  function finishDrawing(current, point) {
+    if (current.kind === 'guide') {
+      const { guide } = guideDrawing(current, point);
+      if (guide) commit({
+        ...project,
+        grid: { ...project.grid, guidesVisible: true },
+        guides: [...project.guides, guide]
+      });
+      return;
+    }
     const { action } = pathPlacement(current, point);
     if (action.placed.length) finishPlacement(action);
     else notify('linePlacementBlocked');
@@ -2039,13 +2062,6 @@
     const point = surfacePoint(event, current.view);
     if (current.kind === 'marquee') {
       updateMarquee(current, point);
-    } else if (current.kind === 'guide') {
-      const anchor = current.shape === 'line' ? guideAnchorAt(point) : undefined;
-      current.guide = Model.guideFromDrag(current.shape, current.start, anchor || point);
-      layers.preview.replaceChildren();
-      if (current.guide) layers.preview.append(guideShape(current.guide, { 'stroke-opacity': .65 }));
-      markGuideAnchor(current.anchor);
-      if (anchor !== current.anchor) markGuideAnchor(anchor);
     } else if (current.kind === 'reference') {
       const limit = Model.REFERENCE_POSITION_LIMIT;
       const { origin, reference } = current;
@@ -2082,7 +2098,7 @@
       previewDrawPlacement(point, action);
     } else {
       current.lastPoint = point;
-      previewPathDrawing(current, point);
+      previewDrawing(current, point);
     }
   }
 
@@ -2096,7 +2112,7 @@
     if (pendingDrawing) {
       if (view === pendingDrawing.view && event.pointerType === 'mouse') {
         setPreviewView(view);
-        previewPathDrawing(pendingDrawing, surfacePoint(event, view));
+        previewDrawing(pendingDrawing, surfacePoint(event, view));
       }
       return;
     }
@@ -2158,14 +2174,6 @@
       finishSplit(current);
       return;
     }
-    if (current.kind === 'guide') {
-      if (current.guide) commit({
-        ...project,
-        grid: { ...project.grid, guidesVisible: true },
-        guides: [...project.guides, current.guide]
-      });
-      return;
-    }
     if (current.kind === 'draw') {
       if (current.action.placed.length) finishPlacement(current.action);
       else {
@@ -2174,7 +2182,7 @@
       }
       return;
     }
-    finishPathDrawing(current, current.lastPoint);
+    finishDrawing(current, current.lastPoint);
   }
 
   function rotateSelected(angle, { absolute = false } = {}) {
