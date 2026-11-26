@@ -1,6 +1,6 @@
 # Tile placement and editing
 
-The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` and `endPointer` in [editor.js](../../editor.js). [geometry.js](../../geometry.js) provides tile geometry, stroke sampling, and `PlacementIndex`.
+Pointer presses enter through `beginPointer` in [editor.js](../../editor.js). `movePointer` updates the click-to-draw preview and passes drag events through to `updateGesture`. `endPointer` handles drag release and cancellation. [geometry.js](../../geometry.js) provides tile geometry, stroke sampling, and `PlacementIndex`.
 
 ## Preserve these behaviors
 
@@ -10,6 +10,7 @@ The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` 
 - Use `PlacementIndex.snapPlacement` for tile-to-tile snapping. It projects the moving tile's center onto the contact outline determined by both tile shapes, their rotation, and the grout gap. Use committed pieces as snap targets and the current action's index to validate candidates.
 - For combined snapping, intersect the contact outlines of two distinct placed tiles or of a placed tile and a grid or custom guide edge. Contacts with the same outward direction slide together. Opposing contacts can hold a tile between neighbors. When nearby tiles compete, offer exact alignment of the ends of two facing edges within a short lateral tolerance, with the full grout gap. Validate candidates against the board and other pieces, using the translated selection for group moves.
 - Keep freehand rotation and tile dimensions in the stroke spacing calculation. Line and Shape place tiles along the sampled path. Fill uses the snapped seed and then steps by tile dimensions plus grout width, expanding through connected accepted placements.
+- With a mouse, Line and Shape start on the first press, preview as the pointer moves, and commit on the second press on the same canvas. Escape clears the preview and keeps the drawing tool active. Touch and pen use a drag.
 - When moving a selection, compute the anchor tile's center from the snap targets and apply the same offset to every selected tile. Validate against the board and unselected tiles before committing the group.
 - Rotate a selection around the average of the selected pieces' positions. Apply the same angle to their positions and orientations so the pivot, spacing, and cut edges stay aligned. The angle field sets an absolute angle for one tile and applies a signed turn for multiple tiles. Check that each rotated tile fits on a surface and leaves the required gap to unselected tiles. Commit the full rotation as one action.
 - Copy captures the selected pieces in the editor clipboard. Paste previews one translation of their outlines and snaps the tile nearest the group's center. Keep the copied rotations and internal spacing. Check each copy against the board and existing tiles with the current grout gap. Commit the entire group with new IDs as one action, then select the copies. Escape or Cancel discards the preview and leaves the selection available.
@@ -22,7 +23,7 @@ The pointer lifecycle starts in `beginPointer` and runs through `updateGesture` 
 ## Check changes
 
 - Test an allowed and blocked placement with grout and rotation. Try a freehand drag, a line or outline, and a fill next to existing tiles.
-- Use both shape buttons to preview and draw their outlines. Verify toolbar alignment on narrow and wide screens and check that selecting another tool hides the options.
+- Use both shape buttons to preview and draw their outlines. Check that moving with the mouse button released updates the preview, the second press commits one undoable action, and Escape discards the preview with the tool still active. Verify toolbar alignment on narrow and wide screens and check that selecting another tool hides the options.
 - Check group movement with snapping enabled, movement blocked by another tile, and undo after a drag or erase.
 - Rotate mixed tiles and touching cut fragments with the button, the R shortcut, and a signed angle. Verify that the pivot stays fixed, one blocked tile rejects the whole rotation, and undo and redo restore the entire group.
 - Copy and paste a single tile and a mixed selection with rotated tiles. Verify preview, group snapping, rejection when any tile collides or crosses the board edge, cancellation, repeated paste, and undo and redo of the whole group. Test the toolbar, keyboard shortcuts, and touch placement.

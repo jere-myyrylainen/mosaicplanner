@@ -16,7 +16,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 - Any two eligible edges can snap together when they yield a valid placement. This includes two targets of the same kind and pairs from different sources. Bring the tile close to both edges or aim at a visible line crossing. With a single nearby target, the tile can slide along that edge.
 - When continuing a row from a placed tile, a valid tile-and-grid snap keeps the grout gap to the neighbor and aligns the new tile with the grid line.
 - Choose **Add image** in the left toolbar to import JPG or PNG images beneath the grid and tiles. Use **Reference images** on the right to adjust the selected image's width and opacity, or select **Move image** and drag on the canvas. Reference images are included in the project JSON file.
-- Add rectangular, circular, triangular, diamond, oval, or leaf tile types to the library. Measure a diamond from tip to tip along each axis. A leaf tapers at both ends along its longer axis. Set the base length for a triangle and edit either its height or apex angle. The other field updates automatically. An apex angle of 60° makes the triangle equilateral. Choose a tile type and click to place a tile or drag to draw. The Line and Shape tools place tiles along an outline. The Fill tool places tiles in a connected empty area, using a grid sized to the selected tile.
+- Add rectangular, circular, triangular, diamond, oval, or leaf tile types to the library. Measure a diamond from tip to tip along each axis. A leaf tapers at both ends along its longer axis. Set the base length for a triangle and edit either its height or apex angle. The other field updates automatically. An apex angle of 60° makes the triangle equilateral. Choose a tile type and click to place a tile or drag to draw freehand. The Line and Shape tools preview the tile layout after the first click and place the tiles on the second click. Press Esc to cancel the preview. On a touchscreen or with a pen, drag to draw a line or shape. The Fill tool places tiles in a connected empty area, using a grid sized to the selected tile.
 - With the Freehand tool, set **Rotation** above the board before clicking or dragging. Press **R** or use the rotate button to turn the next tiles by 15°.
 - Select the Shape tool to show the rectangle and ellipse buttons beside the left toolbar. The first option aligns with the tool immediately above Shape.
 - A red, translucent tile preview marks a blocked freehand placement and keeps the tiles and grout underneath visible.
@@ -53,7 +53,7 @@ To open a specific plan automatically, put its JSON file on the same web server 
 | V, B, L, M, G, H | Select, Freehand, Line, Shape, Fill, Pan |
 | E | Eraser |
 | X | Split tile |
-| Esc | Cancel paste or return to the Select tool |
+| Esc | Cancel an unfinished line or shape, cancel paste, or return to the Select tool |
 | Space + drag | Pan the view |
 | R | Rotate the freehand tile or the current selection by 15° |
 | Shift + click or drag | Modify the current selection |

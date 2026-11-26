@@ -107,6 +107,7 @@
   let worktableVisible = false;
   let placementIndex;
   let gesture = null;
+  let pendingDrawing;
   let spacePressed = false;
   let feedbackTimer;
   let feedbackMessages;
@@ -166,6 +167,7 @@
   }
 
   function useProject(next, save = true) {
+    cancelPendingDrawing();
     if (next.tiles.some(tile => tile.archived)) {
       const inUse = new Set(next.pieces.map(piece => piece.tileId));
       const tiles = next.tiles.filter(tile => !tile.archived || inUse.has(tile.id));
@@ -682,6 +684,7 @@
       choice.dataset.tileChoice = tile.id;
       choice.setAttribute('aria-pressed', active);
       choice.addEventListener('click', () => {
+        if (tile.id !== activeTileId) cancelPendingDrawing();
         activeTileId = tile.id;
         if (tool === 'select' || tool === 'pan' || tool === 'erase') setTool('draw');
         renderLibrary();
@@ -927,6 +930,7 @@
 
   function setTool(name) {
     if (gesture || !toolAvailable(name)) return;
+    cancelPendingDrawing();
     tool = name;
     drawHover = undefined;
     if (name !== 'paste') pendingPaste = undefined;
@@ -991,6 +995,7 @@
     }
     worktableVisible = !worktableVisible;
     if (!worktableVisible) {
+      if (pendingDrawing?.view === tableView) cancelPendingDrawing();
       applySelection(new Set(currentSelection().filter(piece => belongsToView(piece, boardView)).map(piece => piece.id)));
     }
     drawHover = pointerHover = undefined;
@@ -1498,6 +1503,7 @@
     if (dialogs.some(dialog => dialog.open)) return;
     const pan = tool === 'pan' || spacePressed || event.button === 1;
     if (view === tableView && !pan && boardOnlyTools.has(tool)) return;
+    if (!pan && event.pointerType === 'mouse' && pendingDrawing && pendingDrawing.view !== view) return;
     const focused = document.activeElement;
     if ((drawAngleInput && focused === drawAngleInput) ||
         ((tool === 'select' || tool === 'split' || pendingPaste) && focused?.closest(editableFields))) focused.blur();
@@ -1555,8 +1561,20 @@
       placeCandidate(action, point, true);
       gesture = { kind: 'draw', previous: point, phase: 1, action };
       previewDrawPlacement(point, action);
+    } else if (event.pointerType === 'mouse') {
+      if (pendingDrawing) {
+        const current = pendingDrawing;
+        pendingDrawing = undefined;
+        finishPathDrawing(current, point);
+      } else {
+        pendingDrawing = startPathDrawing(view, point, tile);
+        previewPathDrawing(pendingDrawing, point);
+      }
+      event.preventDefault();
+      return;
     } else {
-      gesture = { kind: tool, start: snappedGeometry(pieceAt(point, tile, 0)).piece, lastPoint: point, tile };
+      cancelPendingDrawing();
+      gesture = startPathDrawing(view, point, tile);
     }
     gesture.view = view;
     gesture.screenX = event.clientX;
@@ -1572,6 +1590,17 @@
     markPiece(id, 'erased-piece', true);
   }
 
+  function startPathDrawing(view, point, tile) {
+    return { kind: tool, view, start: snappedGeometry(pieceAt(point, tile, 0)).piece, tile };
+  }
+
+  function cancelPendingDrawing() {
+    if (!pendingDrawing) return false;
+    pendingDrawing = undefined;
+    layers.preview.replaceChildren();
+    return true;
+  }
+
   function drawingGuide(current, point) {
     const { start, tile } = current;
     const end = snappedGeometry(pieceAt(point, tile, 0)).piece;
@@ -1581,6 +1610,24 @@
     }
     const path = Model.outlinePath(outlineShape, start, end);
     return { path, points: Model.sampleOutline(tile, project.seam, path) };
+  }
+
+  function pathPlacement(current, point, limit) {
+    const { path, points } = drawingGuide(current, point);
+    const action = placementAction(current.tile, { limit });
+    for (const center of points) placeCandidate(action, center, true);
+    return { path, action };
+  }
+
+  function previewPathDrawing(current, point) {
+    const { path, action } = pathPlacement(current, point, 350);
+    previewPieces(action.placed, current.tile, { path });
+  }
+
+  function finishPathDrawing(current, point) {
+    const { action } = pathPlacement(current, point);
+    if (action.placed.length) finishPlacement(action);
+    else notify('linePlacementBlocked');
   }
 
   function updateMarquee(current, point) {
@@ -1925,10 +1972,7 @@
       previewDrawPlacement(point, action);
     } else {
       current.lastPoint = point;
-      const guide = drawingGuide(current, point);
-      const action = placementAction(current.tile, { limit: 350 });
-      for (const center of guide.points) placeCandidate(action, center, true);
-      previewPieces(action.placed, current.tile, { path: guide.path });
+      previewPathDrawing(current, point);
     }
   }
 
@@ -1939,6 +1983,13 @@
     }
     if (event.pointerType !== 'touch') pointerHover = { clientX: event.clientX, clientY: event.clientY, view };
     if (spacePressed || (view === tableView && boardOnlyTools.has(tool))) return;
+    if (pendingDrawing) {
+      if (view === pendingDrawing.view && event.pointerType === 'mouse') {
+        setPreviewView(view);
+        previewPathDrawing(pendingDrawing, surfacePoint(event, view));
+      }
+      return;
+    }
     setPreviewView(view);
     if (pendingPaste) previewPaste(surfacePoint(event));
     else if (tool === 'draw') previewDrawHover(event, view);
@@ -2013,11 +2064,7 @@
       }
       return;
     }
-    const guide = drawingGuide(current, current.lastPoint);
-    const action = placementAction(current.tile);
-    for (const point of guide.points) placeCandidate(action, point, true);
-    if (action.placed.length) finishPlacement(action);
-    else notify('linePlacementBlocked');
+    finishPathDrawing(current, current.lastPoint);
   }
 
   function rotateSelected(angle, { absolute = false } = {}) {
@@ -2155,6 +2202,7 @@
     const key = event.key.toLowerCase();
     if (key === 'escape') {
       event.preventDefault();
+      if (cancelPendingDrawing()) return;
       if (!closeDisclosures(true)) returnToSelection();
       return;
     }
