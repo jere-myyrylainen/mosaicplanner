@@ -48,19 +48,25 @@
     return svgElement('rect', { x, y, width: guide.size, height: guide.size, ...props });
   }
 
-  function renderGrout({ pieces, seam, seamColor }, tileTypes, layer, elements) {
+  function groutStroke(piece, project) {
+    return {
+      stroke: piece.seamColor === undefined ? project.seamColor : piece.seamColor,
+      'stroke-width': window.MosaicGeometry.pieceSeam(piece, project),
+      'stroke-linejoin': 'round'
+    };
+  }
+
+  function renderGrout(project, tileTypes, layer, elements) {
     if (!layer) return;
     layer.textContent = '';
-    if (!seam || !seamColor) return;
-
-    // The two half-strokes outside adjacent faces make up one full-width joint.
     layer.setAttribute('fill', 'none');
-    layer.setAttribute('stroke', seamColor);
-    layer.setAttribute('stroke-width', seam);
-    layer.setAttribute('stroke-linejoin', 'round');
+
+    // The tile faces cover the inner half of each grout stroke.
     const fragment = document.createDocumentFragment();
-    for (const piece of pieces) {
-      const shape = pieceShape(piece, tileTypes.get(piece.tileId));
+    for (const piece of project.pieces) {
+      const stroke = groutStroke(piece, project);
+      if (!stroke['stroke-width']) continue;
+      const shape = pieceShape(piece, tileTypes.get(piece.tileId), stroke);
       if (elements) elements.set(piece.id, shape);
       fragment.appendChild(shape);
     }
@@ -176,5 +182,5 @@
     element.setAttribute('visibility', reference.visible ? 'visible' : 'hidden');
   }
 
-  window.MosaicBoard = { svgElement, pieceShape, guideShape, renderGrout, renderBoard, renderWorktable, renderBoardRulers, paintGridPosition, paintReference };
+  window.MosaicBoard = { svgElement, pieceShape, guideShape, groutStroke, renderGrout, renderBoard, renderWorktable, renderBoardRulers, paintGridPosition, paintReference };
 }());

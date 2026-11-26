@@ -20,6 +20,7 @@
   const SPLIT_FRACTIONS = Object.freeze([0, 1 / 4, 1 / 2, 3 / 4, 1]);
   const CURVE_SEGMENTS = 64;
   const MAX_OUTLINE_VERTICES = 128;
+  const MAX_SEAM = 100;
   const DEFAULT_SEAM_COLOR = '#a9a49b';
   const MIN_TRIANGLE_HEIGHT = .1;
   const boardShapes = ['rectangle', 'circle', 'rounded'];
@@ -160,6 +161,17 @@
       { x: -halfWidth, y: -halfHeight }, { x: halfWidth, y: -halfHeight },
       { x: halfWidth, y: halfHeight }, { x: -halfWidth, y: halfHeight }
     ];
+  }
+
+  function seamOverrides({ seam, seamColor } = {}) {
+    return {
+      ...(seam === undefined ? {} : { seam }),
+      ...(seamColor === undefined ? {} : { seamColor: seamColor.toLowerCase() })
+    };
+  }
+
+  function pieceSeam(piece, project) {
+    return piece.seam === undefined ? project.seam : piece.seam;
   }
 
   function pieceGeometry(tile, piece) {
@@ -767,7 +779,7 @@
       const outline = convexHull(clipped.map(point => ({ x: point.x - x, y: point.y - y })));
       if (outline.length < 3 || outline.length > MAX_OUTLINE_VERTICES || polygonArea(outline) <= EPSILON) return {};
       fragments.push({
-        tileId: piece.tileId, angle: piece.angle, outline,
+        ...seamOverrides(piece), tileId: piece.tileId, angle: piece.angle, outline,
         x: piece.x + x * cos - y * sin, y: piece.y + x * sin + y * cos
       });
     }
@@ -975,11 +987,10 @@
     return radius || Math.max(...points.map(vertex => Math.hypot(vertex.x - piece.x, vertex.y - piece.y)));
   }
 
-  function nearbyGuideContacts({ board, grid, guides, seam }, geometry, limit) {
+  function nearbyGuideContacts({ board, grid, guides }, geometry, limit) {
     const custom = [];
     const lattice = [];
-    const halfSeam = seam / 2;
-    const { piece, minX, minY, maxX, maxY } = geometry;
+    const { piece, minX, minY, maxX, maxY, halfSeam } = geometry;
     if (grid.visible) {
       const origin = gridOrigin(grid);
       const halfWidth = board.width / 2;
@@ -1031,13 +1042,12 @@
   }
 
   function pointedGridContacts(project, geometry, limit) {
-    const { piece, minX, minY, maxX, maxY } = geometry;
-    const { board, grid, seam } = project;
+    const { piece, minX, minY, maxX, maxY, halfSeam } = geometry;
+    const { board, grid } = project;
     const corner = nearbyGridLines(project, piece, Math.min(limit, grid.size / 4));
     if (corner.x === undefined || corner.y === undefined || !pointInBoard(board, corner)) return;
     const halfWidth = board.width / 2;
     const halfHeight = board.height / 2;
-    const halfSeam = seam / 2;
     const vertical = [minX - halfSeam, maxX + halfSeam].map(edge => {
       const x = corner.x + (piece.x - edge);
       return linePart(x, -halfHeight, x, halfHeight);
@@ -1058,9 +1068,8 @@
   }
 
   function* pointedGuideCrossings(project, geometry, limit, reach, preferSide, aimedGrid) {
-    const { board, grid, guides, seam } = project;
-    const { piece } = geometry;
-    const halfSeam = seam / 2;
+    const { board, grid, guides } = project;
+    const { piece, halfSeam } = geometry;
     const custom = [];
     const lattice = [];
     for (const guide of grid.guidesVisible ? guides : []) {
@@ -1124,10 +1133,12 @@
   }
 
   class PlacementIndex {
-    constructor(project, excludedIds) {
+    constructor(project, excludedIds, { ignoreSeams = false } = {}) {
       this.board = project.board;
       this.worktable = worktableBounds(project.board, project.worktable, project.worktableHeight);
-      this.gap = project.seam;
+      this.project = project;
+      this.ignoreSeams = ignoreSeams;
+      this.maxHalfSeam = 0;
       this.tileTypes = new Map(project.tiles.map(tile => [tile.id, tile]));
       this.cells = new Map();
       this.geometries = [];
@@ -1137,11 +1148,19 @@
       }
     }
 
+    halfSeam(piece) {
+      return this.ignoreSeams ? 0 : pieceSeam(piece, this.project) / 2;
+    }
+
     geometry(piece) {
-      return pieceGeometry(this.tileTypes.get(piece.tileId), piece);
+      const geometry = pieceGeometry(this.tileTypes.get(piece.tileId), piece);
+      geometry.halfSeam = this.halfSeam(piece);
+      return geometry;
     }
 
     add(geometry) {
+      const halfSeam = this.halfSeam(geometry.piece);
+      this.maxHalfSeam = Math.max(this.maxHalfSeam, halfSeam);
       this.geometries.push(geometry);
       const keys = cellsInBounds(geometry);
       if (!keys) {
@@ -1176,8 +1195,10 @@
 
     hasConflict(geometry) {
       const onTable = isOnWorktable(this.worktable, geometry.piece);
-      for (const other of this.nearby(geometry, this.gap)) {
-        const gap = onTable === isOnWorktable(this.worktable, other.piece) ? this.gap : 0;
+      const halfSeam = this.halfSeam(geometry.piece);
+      for (const other of this.nearby(geometry, halfSeam + this.maxHalfSeam)) {
+        const sameSurface = onTable === isOnWorktable(this.worktable, other.piece);
+        const gap = sameSurface ? halfSeam + this.halfSeam(other.piece) : 0;
         if (tooClose(geometry, other, gap)) return true;
       }
       return false;
@@ -1199,16 +1220,18 @@
     }
 
     nearbyTileContacts(geometry, limit) {
-      const { piece, minX, minY, maxX, maxY } = geometry;
+      const { piece, minX, minY, maxX, maxY, halfSeam } = geometry;
       const tiles = [];
-      const margin = this.gap + limit;
+      const margin = halfSeam + this.maxHalfSeam + limit;
       const onTable = isOnWorktable(this.worktable, piece);
       for (const other of this.nearby(geometry, margin)) {
         if (onTable !== isOnWorktable(this.worktable, other.piece)) continue;
-        if (maxX + margin < other.minX || other.maxX + margin < minX ||
-            maxY + margin < other.minY || other.maxY + margin < minY) continue;
+        const gap = halfSeam + this.halfSeam(other.piece);
+        const reach = gap + limit;
+        if (maxX + reach < other.minX || other.maxX + reach < minX ||
+            maxY + reach < other.minY || other.maxY + reach < minY) continue;
         const parts = [];
-        for (const part of tileContactParts(geometry, other, this.gap)) {
+        for (const part of tileContactParts(geometry, other, gap)) {
           const projected = projectOntoGuide(piece, part);
           if (Math.hypot(projected.x - piece.x, projected.y - piece.y) <= limit + EPSILON) {
             part.bounds = contactBounds(part);
@@ -1219,10 +1242,10 @@
           tiles.push({
             fixed: other,
             parts,
-            minX: other.minX - (maxX - piece.x) - this.gap,
-            maxX: other.maxX + (piece.x - minX) + this.gap,
-            minY: other.minY - (maxY - piece.y) - this.gap,
-            maxY: other.maxY + (piece.y - minY) + this.gap
+            minX: other.minX - (maxX - piece.x) - gap,
+            maxX: other.maxX + (piece.x - minX) + gap,
+            minY: other.minY - (maxY - piece.y) - gap,
+            maxY: other.maxY + (piece.y - minY) + gap
           });
         }
       }
@@ -1254,7 +1277,7 @@
 
       if (snapGuides && (grid.visible || (grid.guidesVisible && project.guides.length))) {
         // Aiming at the visible crossing places the edge of the tile beside it.
-        const reach = Math.SQRT2 * (tileReach(original) + project.seam / 2);
+        const reach = Math.SQRT2 * (tileReach(original) + original.halfSeam);
         const range = reach + pairLimit;
         const aimedGrid = pointedGridContacts(project, original, limit);
         if (grid.snapTiles && aimedGrid) {
@@ -1633,6 +1656,11 @@
     return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
   }
 
+  function validSeamOverrides({ seam, seamColor }) {
+    return (seam === undefined || validNumber(seam, 0, MAX_SEAM)) &&
+      (seamColor === undefined || validColor(seamColor));
+  }
+
   function readPieceOutline(value) {
     if (!Array.isArray(value) || value.length < 3 || value.length > MAX_OUTLINE_VERTICES) {
       throw new ValidationError('invalidProject');
@@ -1662,7 +1690,7 @@
         (board.shape === 'circle' && board.width !== board.height) ||
         (worktable !== undefined && !validNumber(worktable, 1, 10000)) ||
         (worktableHeight !== undefined && (worktable === undefined || !validNumber(worktableHeight, 1, 10000))) ||
-        !validNumber(seam, 0, 100) || !validColor(seamColor) || !grid || typeof grid.visible !== 'boolean' ||
+        !validNumber(seam, 0, MAX_SEAM) || !validColor(seamColor) || !grid || typeof grid.visible !== 'boolean' ||
         typeof grid.snap !== 'boolean' || !validNumber(grid.size, .5, 1000) ||
         !validNumber(grid.weight, .1, 10) ||
         (grid.offsetX !== undefined && !validNumber(grid.offsetX, -GRID_OFFSET_LIMIT, GRID_OFFSET_LIMIT)) ||
@@ -1676,7 +1704,7 @@
     const tileTypes = new Map();
     for (const tile of tiles) {
       if (!tile || !validText(tile.id, 100) || tileTypes.has(tile.id) || !validText(tile.name, 60) ||
-          !tileShapes.includes(tile.shape) || !validColor(tile.color) ||
+          !tileShapes.includes(tile.shape) || !validColor(tile.color) || !validSeamOverrides(tile) ||
           !validNumber(tile.width, .5, 10000) ||
           !validNumber(tile.height, tile.shape === 'triangle' ? MIN_TRIANGLE_HEIGHT :
             tile.shape === 'equilateral' ? triangleHeight(.5) : .5, 10000) ||
@@ -1692,7 +1720,7 @@
       }
       tileTypes.set(tile.id, {
         id: tile.id, name: tile.name.trim(), shape: tile.shape, color: tile.color,
-        width: tile.width, height, ...(tile.archived ? { archived: true } : {}),
+        width: tile.width, height, ...seamOverrides(tile), ...(tile.archived ? { archived: true } : {}),
         ...(tags.length ? { tags } : {})
       });
     }
@@ -1716,13 +1744,16 @@
     restored.seam = seam;
     restored.seamColor = seamColor.toLowerCase();
     if (value.references !== undefined) restored.references = readReferences(value.references);
-    const index = new PlacementIndex({ ...restored, seam: 0 });
+    const index = new PlacementIndex(restored, undefined, { ignoreSeams: true });
     const maxX = Math.max(5000, index.worktable ? index.worktable.maxX + EPSILON : 0);
     for (const piece of pieces) {
       if (!piece || !validText(piece.id, 100) || ids.has(piece.id) || !tileTypes.has(piece.tileId) ||
           !validNumber(piece.x, -5000, maxX) || !validNumber(piece.y, -5000, 5000) ||
-          !validNumber(piece.angle, -360, 360)) throw new ValidationError(error);
-      const clean = { id: piece.id, tileId: piece.tileId, x: piece.x, y: piece.y, angle: angleInDegrees(piece.angle) };
+          !validNumber(piece.angle, -360, 360) || !validSeamOverrides(piece)) throw new ValidationError(error);
+      const clean = {
+        id: piece.id, tileId: piece.tileId, x: piece.x, y: piece.y, angle: angleInDegrees(piece.angle),
+        ...seamOverrides(piece)
+      };
       if (piece.outline !== undefined) clean.outline = readPieceOutline(piece.outline);
       const geometry = index.geometry(clean);
       if (!index.accepts(geometry)) throw new ValidationError('invalidPlacements');
@@ -1736,8 +1767,8 @@
   const model = {
     MAX_PIECES, MAX_TYPES, MAX_STROKE, MAX_PROJECT_FILE, MAX_GUIDES, GRID_OFFSET_LIMIT, MAX_REFERENCES, MAX_REFERENCE_FILE, MAX_REFERENCE_DATA,
     REFERENCE_POSITION_LIMIT, MIN_TRIANGLE_HEIGHT, PlacementIndex, ValidationError, angleInDegrees, blankProject, boardGuideAnchors, colorFamilies, demoProject,
-    fitsBoard, gridOrigin, guideFromDrag, isOnWorktable, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pointInBoard, readProject,
-    referenceWidthLimit, rotatePieces, sampleOutline, sampleSegment, SPLIT_FRACTIONS, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
+    fitsBoard, gridOrigin, guideFromDrag, isOnWorktable, lineSpacing, nearestGuide, nearestGuideAnchor, normalizeTileTags, outlinePath, pieceGeometry, pieceSeam, pointInBoard, readProject,
+    referenceWidthLimit, rotatePieces, sampleOutline, sampleSegment, seamOverrides, SPLIT_FRACTIONS, splitPiece, tileTagKey, tileVertices, triangleHeight, triangleHeightFromAngle, triangleApexAngle,
     validNumber, validReferenceDimensions, worktableBounds
   };
 

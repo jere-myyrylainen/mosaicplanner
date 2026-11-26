@@ -191,7 +191,9 @@ h2 { margin: 0; font-size: 1rem; font-weight: 750; letter-spacing: -.02em; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; min-height: 27px; gap: .5rem; }
 .panel-fields { display: grid; gap: .88rem; margin-top: .9rem; }
 .seam-settings { margin-top: .8rem; border-top: 1px solid var(--line); padding-top: .65rem; }
-.seam-settings .fields-row { margin-top: .45rem; }
+.seam-settings h3 { margin: 0; font-size: .9rem; }
+.seam-settings .fields-row, .board-grout-settings .fields-row { margin-top: .45rem; }
+.seam-settings .button { margin-top: .4rem; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 legend, .field, .check-field { font-size: .875rem; font-weight: 600; }
 .fields-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: .6rem; }
@@ -289,8 +291,9 @@ select {
 .selection-marquee {
   fill: var(--selection-ink); fill-opacity: .12; stroke: var(--selection-ink); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke;
 }
-.preview-piece, .paste-preview .piece-face { opacity: .55; }
-.blocked-preview, .paste-preview.invalid-paste .piece-face {
+.tile-preview-face, .preview-piece { paint-order: stroke fill; }
+.preview-piece { opacity: .55; }
+.blocked-preview, .paste-preview.invalid-paste .preview-piece {
   fill: #d33c38; fill-opacity: .24; opacity: 1;
   stroke: var(--danger); stroke-width: 1.5; vector-effect: non-scaling-stroke;
 }
