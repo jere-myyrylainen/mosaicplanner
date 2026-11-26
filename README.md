@@ -10,7 +10,7 @@ Use the language menu in the header to switch between **Suomi** (Finnish) and **
 
 - The Compass Rose example opens on your first visit. Choose **File → New** to name the project and size a rectangular, circular, or rounded rectangular board. Creating a project keeps your current tile library. Change the board later under **Project → Board settings**.
 - Open **Project → Guide grid settings** and choose **Move guide grid**, then drag on the canvas to shift the grid. For precise positioning, enter **Horizontal offset** and **Vertical offset** in millimetres. Positive values shift right and down from the default position. The project saves both offsets.
-- Select **Custom guides** in the left toolbar, then choose a line, square, or circle in the adjacent toolbar. Drag a line from end to end, a square from a corner, or a circle from its center to its edge. Choose **Remove guide** and click a guide's outline to delete it. Undo works for both drawing and removing guides. Toggle their visibility under **View**.
+- Select **Custom guides** in the left toolbar, then choose a line, square, or circle in the adjacent toolbar. Click both ends of a line, opposite corners of a square, or the center and edge of a circle. Press Esc to cancel the preview. On a touchscreen or with a pen, drag between those points. Choose **Remove guide** and click a guide's outline to delete it. Undo works for both drawing and removing guides. Toggle their visibility under **View**.
 - The top and left rulers show millimetres from the left and top of the board at 10% intervals. Select **Line guide** to see anchor points every 10 mm along the board edges and at the ends of each scale. Either end of a line guide snaps to a nearby anchor.
 - Open the magnet icon in the bottom bar to enable **Snap to placed tiles** or **Snap to guide lines**. A tile keeps its rotation and leaves a full grout gap to a placed tile or half a gap to a visible grid line or guide, which marks the center of the joint.
 - Any two eligible edges can snap together when they yield a valid placement. This includes two targets of the same kind and pairs from different sources. Bring the tile close to both edges or aim at a visible line crossing. With a single nearby target, the tile can slide along that edge.
@@ -54,7 +54,7 @@ To open a specific plan automatically, put its JSON file on the same web server 
 | V, B, L, M, G, H | Select, Freehand, Line, Shape, Fill, Pan |
 | E | Eraser |
 | X | Split tile |
-| Esc | Cancel an unfinished line or shape, cancel paste, or return to the Select tool |
+| Esc | Cancel an unfinished line, shape, or guide, cancel paste, or return to the Select tool |
 | Space + drag | Pan the view |
 | R | Rotate the freehand tile or the current selection by 15° |
 | Shift + click or drag | Modify the current selection |
