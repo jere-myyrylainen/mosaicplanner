@@ -119,6 +119,7 @@
     clearFilters: ["Tyhjennä suodattimet", "Clear filters"],
     tileTypes: ["Palatyypit", "Tile types"],
     emptyLibrary: ["Palakirjasto on tyhjä.", "The tile library is empty."],
+    selectedTileType: ["Valittu palatyyppi", "Selected tile type"],
     selectedTile: ["Valittu pala", "Selected tile"],
     selectedCutTile: ["Leikattu pala", "Cut tile"],
     cutTileCount: ["{total} ({cut} leikattua)", "{total} ({cut} cut)"],

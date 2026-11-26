@@ -6,12 +6,12 @@
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fcfdfa">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#242a26">
   <title>Mosaic Planner</title>
-  <link rel="stylesheet" href="styles.css?v=23">
-  <script defer src="i18n.js?v=22"></script>
+  <link rel="stylesheet" href="styles.css?v=24">
+  <script defer src="i18n.js?v=23"></script>
   <script defer src="geometry.js?v=27"></script>
   <script defer src="board-renderer.js?v=11"></script>
   <script defer src="project-storage.js?v=1"></script>
-  <script defer src="editor.js?v=27"></script>
+  <script defer src="editor.js?v=28"></script>
 </head>
 <body inert>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -238,6 +238,7 @@
           <ul id="tile-list" class="tile-list" data-aria-label="tileTypes"></ul>
           <p id="empty-library" class="empty-library" hidden data-text="emptyLibrary"></p>
         </div>
+        <section id="library-tile-details" class="library-tile-details" hidden data-aria-label="selectedTileType"></section>
         <section class="seam-settings" aria-labelledby="seam-heading">
           <h2 id="seam-heading" data-text="grout"></h2>
           <div class="fields-row">

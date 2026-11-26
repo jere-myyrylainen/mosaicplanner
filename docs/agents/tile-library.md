@@ -12,10 +12,12 @@
 - The mosaic inventory counts pieces on the main board. Show the number of worktable pieces separately in the editor's status bar.
 - Show the current mosaic count next to the inventory icon. Give the disclosure a localized accessible name and keep its per-type breakdown in the panel.
 - Build library filters from active types. A color can belong to multiple families. Tag filtering requires all selected tags and uses normalized keys while retaining their display labels. Name sorting uses the active locale. The browser stores the selected sort order separately from the project.
+- In the compact list, show a swatch, name, tag pills, and dimensions at the right end of each row. Use a shared swatch scale across the library and enlarge exceptionally small silhouettes to keep them legible. Show the active drawing tile's larger preview, full dimensions, tags, and library actions below the list, including when filters hide its row. Keep the expanded grid's actions on the cards.
 
 ## Check changes
 
 - Add and edit a triangle using both height and apex angle. Verify that an edit which makes existing pieces invalid leaves the old type intact.
-- Clone a tile already in use. Verify the prefilled values, saving with a new ID, cancellation, and undo. Check the clone button in the compact list and expanded grid.
+- Clone a tile already in use. Verify the prefilled values, saving with a new ID, cancellation, and undo. Check the clone button in the compact details and expanded grid.
 - Create a diamond, an oval, and leaves in both horizontal and vertical proportions. Check their swatches and reopen their dimensions in the edit dialog.
 - Archive an in-use type and verify counts, rendering, and reopening. For filter or layout edits, test combined filters and compact and expanded library views.
+- Compare swatches for different sizes, filter the list, and verify that their scale and the selected details remain consistent. Test long names, tags, and dimensions at narrow widths.
