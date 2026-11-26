@@ -89,6 +89,7 @@
   let libraryOrder = restoreLibraryOrder();
   let librarySource;
   let availableTiles = [];
+  let compactSwatchViewSize = 8;
   let libraryTileColors = new Map();
   let activeTileId;
   let selectedIds = new Set();
@@ -471,8 +472,7 @@
     renderInventory(placementIndex.tileTypes, counts);
   }
 
-  function tileSwatch(tile) {
-    const viewSize = Math.max(tile.width, tile.height) * 1.1;
+  function tileSwatch(tile, viewSize = Math.max(tile.width, tile.height) * 1.1) {
     const swatch = svgElement('svg', {
       class: 'tile-swatch', 'aria-hidden': 'true',
       viewBox: [-viewSize / 2, -viewSize / 2, viewSize, viewSize].join(' ')
@@ -542,10 +542,12 @@
     byId('board-radius-field').hidden = boardRadiusInput.disabled = !rounded;
   }
 
-  function tileSizeText(tile) {
-    if (tile.shape === 'circle') return 'Ø ' + I18n.number(tile.width) + ' mm';
-    if (tile.shape === 'equilateral') return '△ ' + I18n.number(tile.width) + ' mm';
-    return I18n.number(tile.width) + ' × ' + I18n.number(tile.height) + ' mm';
+  function tileSizeText(tile, withUnit = true) {
+    const width = I18n.number(tile.width);
+    const unit = withUnit ? ' mm' : '';
+    if (tile.shape === 'circle') return 'Ø ' + width + unit;
+    if (tile.shape === 'equilateral') return '△ ' + width + unit;
+    return width + ' × ' + I18n.number(tile.height) + unit;
   }
 
   function tileSizeKey(tile) {
@@ -566,6 +568,7 @@
     if (librarySource === project.tiles) return;
     librarySource = project.tiles;
     availableTiles = project.tiles.filter(tile => !tile.archived);
+    compactSwatchViewSize = Math.max(8, ...availableTiles.map(tile => Math.max(tile.width, tile.height) * 1.1));
     byId('library-tools').hidden = availableTiles.length === 0;
 
     const sizes = new Map();
@@ -665,9 +668,68 @@
     return tiles;
   }
 
+  function tileTagPills(tags) {
+    const pills = document.createElement('span');
+    pills.className = 'tile-tags';
+    for (const tag of tags) {
+      const pill = document.createElement('span');
+      pill.className = 'tile-tag';
+      pill.textContent = pill.title = tag;
+      pills.append(pill);
+    }
+    return pills;
+  }
+
+  function tileLibraryActions(tile) {
+    const actions = document.createElement('div');
+    actions.className = 'tile-actions';
+    const controls = [
+      ['edit-tile', 'edit', 'editTileType', 'editNamedTile', () => openTileDialog(tile)],
+      ['clone-tile', 'copy', 'cloneTileType', 'cloneNamedTile', () => openTileDialog(tile, { clone: true })],
+      ['remove-tile delete-button', 'delete', 'removeTileType', 'removeNamedTile', () => removeTileFromLibrary(tile)]
+    ];
+    for (const [className, symbol, title, label, handler] of controls) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'icon-button ' + className;
+      button.dataset.tileAction = symbol;
+      button.title = t(title);
+      button.setAttribute('aria-label', t(label, { name: tile.name }));
+      button.append(icon(symbol));
+      button.addEventListener('click', handler);
+      actions.append(button);
+    }
+    return actions;
+  }
+
+  function renderLibraryTileDetails(tile) {
+    const details = byId('library-tile-details');
+    const focusedAction = details.contains(document.activeElement) && document.activeElement.dataset.tileAction;
+    details.hidden = !tile;
+    if (!tile) {
+      details.replaceChildren();
+      return;
+    }
+    const preview = document.createElement('div');
+    preview.className = 'library-tile-preview';
+    const caption = document.createElement('div');
+    const name = document.createElement('h3');
+    name.textContent = tile.name;
+    const metadata = document.createElement('p');
+    metadata.textContent = t(tile.shape) + ' · ' + tileSizeText(tile);
+    caption.append(name, metadata);
+    preview.append(tileSwatch(tile), caption);
+    details.replaceChildren(preview);
+    if (tile.tags?.length) details.append(tileTagPills(tile.tags));
+    const actions = tileLibraryActions(tile);
+    details.append(actions);
+    if (focusedAction) actions.querySelector('[data-tile-action="' + focusedAction + '"]')?.focus({ preventScroll: true });
+  }
+
   function renderLibrary() {
     refreshLibraryOptions();
     const visibleTiles = filteredLibraryTiles();
+    const expanded = editor.classList.contains('library-expanded');
     const list = byId('tile-list');
     const fragment = document.createDocumentFragment();
     const focusedTileId = list.contains(document.activeElement) ? document.activeElement.dataset.tileChoice : null;
@@ -696,42 +758,32 @@
       const name = document.createElement('strong');
       name.textContent = tile.name;
       const size = document.createElement('small');
-      size.textContent = tileSizeText(tile);
-      caption.append(name, size);
-      if (tile.tags?.length) {
-        const tags = document.createElement('small');
-        tags.className = 'tile-tags';
-        tags.textContent = tile.tags.join(', ');
-        tags.title = tags.textContent;
-        caption.append(tags);
+      caption.append(name);
+      if (expanded) {
+        size.textContent = tileSizeText(tile);
+        caption.append(size);
+        if (tile.tags?.length) {
+          const tags = document.createElement('small');
+          tags.className = 'tile-card-tags';
+          tags.textContent = tags.title = tile.tags.join(', ');
+          caption.append(tags);
+        }
+        choice.append(tileSwatch(tile), caption);
+        item.append(choice, tileLibraryActions(tile));
+      } else {
+        if (tile.tags?.length) caption.append(tileTagPills(tile.tags));
+        size.className = 'tile-size';
+        size.textContent = tileSizeText(tile, false);
+        size.title = tileSizeText(tile);
+        const unit = document.createElement('span');
+        unit.className = 'sr-only';
+        unit.textContent = ' mm';
+        size.append(unit);
+        // Share the scale across the library, with a minimum visible silhouette for unusually small tiles.
+        const viewSize = Math.min(compactSwatchViewSize, Math.max(tile.width, tile.height) * 4);
+        choice.append(tileSwatch(tile, viewSize), caption, size);
+        item.append(choice);
       }
-      choice.append(tileSwatch(tile), caption);
-
-      const edit = document.createElement('button');
-      edit.type = 'button';
-      edit.className = 'icon-button edit-tile';
-      edit.title = t('editTileType');
-      edit.setAttribute('aria-label', t('editNamedTile', { name: tile.name }));
-      edit.append(icon('edit'));
-      edit.addEventListener('click', () => openTileDialog(tile));
-      const clone = document.createElement('button');
-      clone.type = 'button';
-      clone.className = 'icon-button clone-tile';
-      clone.title = t('cloneTileType');
-      clone.setAttribute('aria-label', t('cloneNamedTile', { name: tile.name }));
-      clone.append(icon('copy'));
-      clone.addEventListener('click', () => openTileDialog(tile, { clone: true }));
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'icon-button remove-tile delete-button';
-      remove.title = t('removeTileType');
-      remove.setAttribute('aria-label', t('removeNamedTile', { name: tile.name }));
-      remove.append(icon('delete'));
-      remove.addEventListener('click', () => removeTileFromLibrary(tile));
-      const actions = document.createElement('div');
-      actions.className = 'tile-actions';
-      actions.append(edit, clone, remove);
-      item.append(choice, actions);
       fragment.append(item);
     }
     list.replaceChildren(fragment);
@@ -740,10 +792,11 @@
     result.hidden = libraryFilterCount() === 0;
     result.textContent = visibleTiles.length ?
       t('libraryResult', { visible: visibleTiles.length, total: availableTiles.length }) : t('noFilterMatches');
-    const hiddenTile = visibleTiles.some(tile => tile.id === activeTileId) ? null :
-      availableTiles.find(tile => tile.id === activeTileId);
+    const selectedTile = availableTiles.find(tile => tile.id === activeTileId);
+    const hiddenTile = !visibleTiles.some(tile => tile.id === activeTileId) && selectedTile;
     byId('hidden-drawing-tile').hidden = !hiddenTile;
     if (hiddenTile) byId('hidden-drawing-tile').textContent = t('hiddenDrawingTile', { name: hiddenTile.name });
+    renderLibraryTileDetails(expanded ? undefined : selectedTile);
     if (focusTarget) focusTarget.focus({ preventScroll: true });
   }
 
@@ -757,6 +810,7 @@
     expandLibrary.title = t(label);
     expandLibrary.setAttribute('aria-label', t(label));
     expandLibrary.querySelector('use').setAttribute('href', expanded ? '#i-collapse' : '#i-expand');
+    renderLibrary();
     drawHover = undefined;
     layers.preview.replaceChildren();
     renderView();
@@ -1324,7 +1378,8 @@
     commit({ ...project, tiles });
     if (source) {
       const action = editing ? '.edit-tile' : '.tile-choice';
-      const nextControl = byId('tile-list').querySelector('.tile-row.active ' + action) || byId('add-tile-text');
+      const nextControl = byId('tile-list').querySelector('.tile-row.active ' + action) ||
+        byId('library-tile-details').querySelector(action) || byId('add-tile-text');
       nextControl.focus({ preventScroll: true });
     }
     if (shouldStartDrawing && !selectedIds.size) setTool('draw');
