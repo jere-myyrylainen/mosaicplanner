@@ -2,6 +2,13 @@
 
 Mosaic Planner is an offline mosaic editor written in plain JavaScript, HTML, CSS, and SVG. Open `index.html` to edit projects or `viewer.html` to view them. The app runs directly from these files and can also be served by a static web server.
 
+## Branch, review, and release workflow
+
+1. Start every change request, including documentation updates, by creating a new branch from the latest `origin/main`.
+2. After verifying the changes, commit them and push the branch to GitHub automatically as part of the task.
+3. Open a pull request targeting `main` and include its GitHub link in the handoff to the requester.
+4. The requester approves the pull request and merges it into `main`. GitHub Pages automatically publishes the merged changes.
+
 ## Run and verify
 
 - For local HTTP testing, run `python3 -m http.server 8765 --bind 127.0.0.1` from the repository root and open `http://127.0.0.1:8765/`.
